@@ -1,0 +1,23 @@
+{
+  "name": "@fotoin/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "FOTOIN API - order intake, AI generation pipeline, human QA review, marketplace delivery",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "morgan": "^1.10.0",
+    "multer": "^2.4.0",
+    "nanoid": "^5.0.9",
+    "sharp": "^0.35.4",
+    "zod": "^3.24.1"
+  }
+}
