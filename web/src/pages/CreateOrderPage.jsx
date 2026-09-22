@@ -305,23 +305,23 @@ export default function CreateOrderPage() {
               </select>
             </div>
 
-            <div className="card card--flat" style={{ background: 'var(--surface-alt)' }}>
+            <div className="summary">
               <div className="row row-between">
                 <div>
-                  <strong>{pack.name}</strong>
+                  <strong>Paket {pack.name}</strong>
                   <div className="small muted">
-                    {files.length} foto dikirim - {form.styleIds.length} gaya -{' '}
+                    {files.length} foto dikirim &middot; {form.styleIds.length} gaya &middot;{' '}
                     {form.marketplaceIds.length} marketplace
                   </div>
                 </div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>{rupiah(pack.priceIdr)}</div>
+                <div className="summary__price">{rupiah(pack.priceIdr)}</div>
               </div>
             </div>
           </>
         )}
       </div>
 
-      <div className="row row-between" style={{ marginTop: 20 }}>
+      <div className="wizard-nav">
         <button
           type="button"
           className="btn btn--ghost"
@@ -348,7 +348,7 @@ export default function CreateOrderPage() {
             onClick={submit}
           >
             {submitting ? <Spinner /> : null}
-            {submitting ? 'Mengirim...' : `Buat Pesanan - ${rupiah(pack.priceIdr)}`}
+            {submitting ? 'Mengirim...' : `Buat Pesanan · ${rupiah(pack.priceIdr)}`}
           </button>
         )}
       </div>

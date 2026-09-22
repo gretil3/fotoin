@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../api/client.js';
 import { rupiah } from '../lib/format.js';
 import { Alert, LoadingState } from '../components/ui.jsx';
+import Icon from '../components/Icon.jsx';
 
 const faqs = [
   {
@@ -51,22 +52,19 @@ export default function PricingPage() {
       ) : (
         <div className="grid grid-3">
           {packs.map((pack) => (
-            <div
-              className="card"
-              key={pack.id}
-              style={pack.popular ? { borderColor: 'var(--brand-500)', boxShadow: 'var(--shadow)' } : undefined}
-            >
-              {pack.popular && <span className="badge badge--brand">Paling laris</span>}
-              <h3 style={{ marginTop: pack.popular ? 12 : 0 }}>{pack.name}</h3>
-              <div style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.03em' }}>
-                {rupiah(pack.priceIdr)}
+            <div className={`card price-card${pack.popular ? ' is-popular' : ''}`} key={pack.id}>
+              <div className="row row-between" style={{ marginBottom: 10 }}>
+                <h3 style={{ margin: 0 }}>{pack.name}</h3>
+                {pack.popular && <span className="badge badge--brand">Paling laris</span>}
               </div>
-              <div className="small muted" style={{ marginBottom: 16 }}>
-                per paket - selesai sekitar {pack.turnaroundHours} jam
+              <div className="price-card__price">{rupiah(pack.priceIdr)}</div>
+              <div className="small muted" style={{ marginBottom: 18 }}>
+                per paket &middot; selesai sekitar {pack.turnaroundHours} jam
               </div>
-              <ul style={{ paddingLeft: 18, margin: '0 0 20px' }}>
+              <ul className="checklist">
                 {pack.highlights.map((item) => (
-                  <li key={item} className="small" style={{ marginBottom: 6 }}>
+                  <li key={item}>
+                    <Icon name="check" strokeWidth={2.4} />
                     {item}
                   </li>
                 ))}
@@ -82,16 +80,14 @@ export default function PricingPage() {
         </div>
       )}
 
-      <section className="section" style={{ marginTop: 48 }}>
-        <h2>Pertanyaan yang sering muncul</h2>
-        <div className="grid grid-2" style={{ marginTop: 16 }}>
+      <section className="section" style={{ marginTop: 56, maxWidth: 760, marginInline: 'auto' }}>
+        <h2 className="center">Pertanyaan yang sering muncul</h2>
+        <div className="faq" style={{ marginTop: 20 }}>
           {faqs.map((faq) => (
-            <div className="card card--flat" key={faq.q}>
-              <div className="card__title">{faq.q}</div>
-              <p className="small muted" style={{ margin: 0 }}>
-                {faq.a}
-              </p>
-            </div>
+            <details key={faq.q}>
+              <summary>{faq.q}</summary>
+              <p className="small muted">{faq.a}</p>
+            </details>
           ))}
         </div>
       </section>

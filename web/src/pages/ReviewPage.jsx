@@ -122,10 +122,7 @@ export default function ReviewPage() {
           Semua pesanan sudah dicek. Halaman ini menyegar otomatis setiap 8 detik.
         </EmptyState>
       ) : (
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: 'minmax(240px, 320px) minmax(0, 1fr)', marginTop: 20 }}
-        >
+        <div className="split split--queue" style={{ marginTop: 20 }}>
           <div>
             <h3>Antrean ({queue.length})</h3>
             <div className="grid" style={{ gap: 10 }}>

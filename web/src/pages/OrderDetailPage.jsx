@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import api from '../api/client.js';
 import { dateTime, relativeTime, rupiah } from '../lib/format.js';
 import { Alert, LoadingState, Spinner, StatusBadge } from '../components/ui.jsx';
+import Icon from '../components/Icon.jsx';
 
 const LIVE_STATUSES = ['diproses_ai', 'menunggu_review', 'revisi'];
 
@@ -80,7 +81,7 @@ export default function OrderDetailPage() {
 
       {error && <Alert tone="error">{error}</Alert>}
 
-      <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 2fr) minmax(260px, 1fr)' }}>
+      <div className="split">
         <div>
           {order.status === 'menunggu_pembayaran' && (
             <div className="card section">
@@ -167,11 +168,12 @@ export default function OrderDetailPage() {
                       </div>
                       <div className="muted">{result.styleName}</div>
                       <a
-                        className="btn btn--sm btn--ghost"
-                        style={{ marginTop: 8 }}
+                        className="btn btn--sm btn--ghost btn--block"
+                        style={{ marginTop: 10 }}
                         href={result.url}
                         download
                       >
+                        <Icon name="download" size={16} />
                         Unduh
                       </a>
                     </figcaption>

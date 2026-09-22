@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { fileSize } from '../lib/format.js';
+import Icon from './Icon.jsx';
 
 /**
  * Drag-and-drop (or tap-to-pick) photo input.
@@ -61,8 +62,10 @@ export default function UploadDropzone({ files, onChange, maxFiles = 5, maxSizeM
           addFiles(event.dataTransfer.files);
         }}
       >
-        <div className="dropzone__icon">[ + ]</div>
-        <div style={{ fontWeight: 650 }}>Tarik foto ke sini atau ketuk untuk pilih</div>
+        <div className="dropzone__icon">
+          <Icon name="upload" size={22} />
+        </div>
+        <div style={{ fontWeight: 700 }}>Ketuk untuk pilih foto, atau tarik ke sini</div>
         <div className="small muted">
           JPG, PNG, atau WEBP - maksimal {maxFiles} foto, {maxSizeMb} MB per foto
         </div>
@@ -97,7 +100,7 @@ export default function UploadDropzone({ files, onChange, maxFiles = 5, maxSizeM
                   aria-label={`Hapus ${file.name}`}
                   onClick={() => removeAt(index)}
                 >
-                  x
+                  <Icon name="close" size={14} strokeWidth={2.4} />
                 </button>
               </div>
             ))}

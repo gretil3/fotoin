@@ -1,4 +1,5 @@
 import { statusTone } from '../lib/format.js';
+import Icon from './Icon.jsx';
 
 export function StatusBadge({ status, label }) {
   return <span className={`badge badge--${statusTone(status)}`}>{label || status}</span>;
@@ -6,17 +7,32 @@ export function StatusBadge({ status, label }) {
 
 export function Stepper({ steps, current }) {
   return (
-    <ol className="stepper">
-      {steps.map((step, index) => {
-        const state = index === current ? 'is-active' : index < current ? 'is-done' : '';
-        return (
-          <li key={step} className={`step ${state}`}>
-            <span className="step__num">{index < current ? 'OK' : index + 1}</span>
-            {step}
-          </li>
-        );
-      })}
-    </ol>
+    <>
+      <ol className="stepper">
+        {steps.map((step, index) => {
+          const state = index === current ? 'is-active' : index < current ? 'is-done' : '';
+          return (
+            <li key={step} className={`step ${state}`} aria-current={index === current ? 'step' : undefined}>
+              <span className="step__num">
+                {index < current ? <Icon name="check" size={14} strokeWidth={2.6} /> : index + 1}
+              </span>
+              {step}
+            </li>
+          );
+        })}
+      </ol>
+      <div className="stepper-compact">
+        <div className="stepper-compact__label">
+          <strong>{steps[current]}</strong>
+          <span className="muted">
+            Langkah {current + 1} dari {steps.length}
+          </span>
+        </div>
+        <div className="progress">
+          <div className="progress__bar" style={{ width: `${((current + 1) / steps.length) * 100}%` }} />
+        </div>
+      </div>
+    </>
   );
 }
 
