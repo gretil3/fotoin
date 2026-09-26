@@ -86,6 +86,43 @@ export function OptionTile({ selected, disabled, onClick, swatch, name, descript
   );
 }
 
+/**
+ * Tap-to-answer chips for a brief question. `value` is an option id (single)
+ * or an array of ids (multi). Single behaves like a radio group; multi stops
+ * accepting new picks once `max` is reached.
+ */
+export function ChoiceChips({ options, value, multi = false, max, onChange, label }) {
+  const selected = multi ? value || [] : value ? [value] : [];
+  const full = multi && max ? selected.length >= max : false;
+
+  const toggle = (id) => {
+    if (!multi) return onChange(id);
+    if (selected.includes(id)) return onChange(selected.filter((item) => item !== id));
+    if (!full) onChange([...selected, id]);
+  };
+
+  return (
+    <div className="choices" role="group" aria-label={label}>
+      {options.map((option) => {
+        const isOn = selected.includes(option.id);
+        return (
+          <button
+            key={option.id}
+            type="button"
+            className="choice"
+            aria-pressed={isOn}
+            disabled={!isOn && full}
+            onClick={() => toggle(option.id)}
+          >
+            {isOn && <Icon name="check" size={14} strokeWidth={2.6} />}
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** Turns a catalog style's background definition into an inline CSS value. */
 export function swatchStyle(background) {
   if (!background) return { background: '#eee' };

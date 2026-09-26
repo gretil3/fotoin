@@ -1,6 +1,15 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { CATEGORIES, MARKETPLACES, PACKS, getPack, getStyle } from '../src/data/catalog.js';
+import {
+  BRIEF_QUESTIONS,
+  BRIEF_VERSION,
+  CATEGORIES,
+  MARKETPLACES,
+  PACKS,
+  getBriefQuestions,
+  getPack,
+  getStyle,
+} from '../src/data/catalog.js';
 
 describe('catalog integrity', () => {
   test('covers the four target UMKM verticals', () => {
@@ -63,5 +72,59 @@ describe('catalog integrity', () => {
     assert.ok(getStyle('kuliner', 'meja-kayu'));
     assert.equal(getStyle('kosmetik', 'meja-kayu'), null);
     assert.equal(getStyle('tidak-ada', 'studio-putih'), null);
+  });
+});
+
+describe('brief questions', () => {
+  test('every question is well formed and its default is a real option', () => {
+    const ids = BRIEF_QUESTIONS.map((question) => question.id);
+    assert.equal(new Set(ids).size, ids.length, 'question ids are unique');
+    assert.ok(Number.isInteger(BRIEF_VERSION) && BRIEF_VERSION >= 1);
+
+    for (const category of CATEGORIES) {
+      for (const question of getBriefQuestions(category.id)) {
+        const where = `${category.id}/${question.id}`;
+        assert.ok(question.label, `${where} needs a Bahasa label`);
+        assert.ok(['single', 'multi'].includes(question.type), `${where} has an unknown type`);
+        assert.ok(question.options.length >= 2, `${where} needs options to tap`);
+
+        const optionIds = question.options.map((option) => option.id);
+        assert.equal(new Set(optionIds).size, optionIds.length, `${where} has duplicate option ids`);
+
+        const defaults =
+          question.type === 'single' ? [question.default].filter(Boolean) : question.default;
+        assert.ok(Array.isArray(defaults), `${where} multi default must be an array`);
+        for (const id of defaults) {
+          assert.ok(optionIds.includes(id), `${where} default "${id}" is not one of its options`);
+        }
+        if (question.max) assert.ok(defaults.length <= question.max, `${where} default exceeds max`);
+      }
+    }
+  });
+
+  test('every option says what it adds to the prompt, or null for "leave it to us"', () => {
+    for (const category of CATEGORIES) {
+      for (const question of getBriefQuestions(category.id)) {
+        for (const option of question.options) {
+          const where = `${category.id}/${question.id}/${option.id}`;
+          assert.ok(option.label, `${where} needs a Bahasa label`);
+          assert.ok(
+            option.prompt === null || (typeof option.prompt === 'string' && option.prompt.length > 5),
+            `${where} must have a prompt fragment or an explicit null`,
+          );
+        }
+      }
+    }
+  });
+
+  test('each category offers its own product types, with an "other" escape hatch', () => {
+    for (const category of CATEGORIES) {
+      const types = category.productTypes || [];
+      assert.ok(types.filter((type) => type.prompt).length >= 3, `${category.id} needs product types`);
+      assert.ok(
+        types.some((type) => type.id === 'lainnya' && type.prompt === null),
+        `${category.id} needs "Lainnya" for products that fit no type`,
+      );
+    }
   });
 });

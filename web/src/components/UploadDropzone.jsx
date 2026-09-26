@@ -17,8 +17,8 @@ export default function UploadDropzone({ files, onChange, maxFiles = 5, maxSizeM
     let message = null;
 
     for (const file of Array.from(incoming)) {
-      if (!file.type.startsWith('image/')) {
-        message = `${file.name} bukan file gambar.`;
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        message = `${file.name} harus berformat JPG, PNG, atau WEBP.`;
         continue;
       }
       if (file.size > maxSizeMb * 1024 * 1024) {
@@ -72,7 +72,7 @@ export default function UploadDropzone({ files, onChange, maxFiles = 5, maxSizeM
         <input
           ref={inputRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           multiple
           hidden
           onChange={(event) => {

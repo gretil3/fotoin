@@ -3,9 +3,44 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/client.js';
 import { rupiah } from '../lib/format.js';
 import UploadDropzone from '../components/UploadDropzone.jsx';
-import { Alert, LoadingState, OptionTile, Spinner, Stepper, swatchStyle } from '../components/ui.jsx';
+import {
+  Alert,
+  ChoiceChips,
+  LoadingState,
+  OptionTile,
+  Spinner,
+  Stepper,
+  swatchStyle,
+} from '../components/ui.jsx';
 
-const STEPS = ['Foto Produk', 'Kategori & Gaya', 'Marketplace', 'Paket & Bayar'];
+const STEPS = ['Foto Produk', 'Kategori & Gaya', 'Cerita Produk', 'Marketplace', 'Paket & Bayar'];
+
+const NOTES_MAX = 500;
+
+// Tap to add a ready-made sentence to the story box, for sellers facing an
+// empty text field. Plain Bahasa for the reviewer; they are not prompts.
+const STORY_PHRASES = [
+  'Warna kemasan jangan diubah.',
+  'Tulisan di label harus terbaca jelas.',
+  'Tampilkan produk dari depan.',
+  'Latar jangan terlalu ramai.',
+  'Tanpa orang atau tangan di foto.',
+];
+
+/** Every brief question at its default, so tapping straight through is valid. */
+const briefDefaults = (questions) =>
+  Object.fromEntries(
+    questions.map((question) => [
+      question.id,
+      Array.isArray(question.default) ? [...question.default] : question.default,
+    ]),
+  );
+
+const questionHint = (question) => {
+  if (question.type === 'single') return 'Pilih satu';
+  if (question.max) return `Maks. ${question.max} · kosongkan = serahkan ke kami`;
+  return 'Boleh lebih dari satu';
+};
 
 const emptyForm = {
   sellerName: '',
@@ -17,6 +52,7 @@ const emptyForm = {
   marketplaceIds: [],
   packId: 'standar',
   notes: '',
+  briefAnswers: {},
   paymentMethodId: 'qris',
 };
 
@@ -34,7 +70,11 @@ export default function CreateOrderPage() {
     let cancelled = false;
     api
       .catalog()
-      .then((data) => !cancelled && setCatalog(data))
+      .then((data) => {
+        if (cancelled) return;
+        setCatalog(data);
+        setForm((prev) => ({ ...prev, briefAnswers: briefDefaults(data.briefQuestions || []) }));
+      })
       .catch((err) => !cancelled && setLoadError(err.message));
     return () => {
       cancelled = true;
@@ -49,8 +89,30 @@ export default function CreateOrderPage() {
     () => catalog?.categories.find((item) => item.id === form.categoryId) || null,
     [catalog, form.categoryId],
   );
+  // "Produk ini apa?" takes its options from the chosen category.
+  const briefQuestions = useMemo(
+    () =>
+      (catalog?.briefQuestions || []).map((question) =>
+        question.perCategory ? { ...question, options: category?.productTypes || [] } : question,
+      ),
+    [catalog, category],
+  );
 
   const set = (patch) => setForm((prev) => ({ ...prev, ...patch }));
+
+  const answer = (questionId, value) =>
+    setForm((prev) => ({ ...prev, briefAnswers: { ...prev.briefAnswers, [questionId]: value } }));
+
+  // A phrase chip adds its sentence to the story, or takes it back out.
+  const togglePhrase = (phrase) => {
+    const current = form.notes.trim();
+    if (current.includes(phrase)) {
+      set({ notes: current.replace(phrase, '').replace(/\s{2,}/g, ' ').trim() });
+      return;
+    }
+    const next = current ? `${current} ${phrase}` : phrase;
+    if (next.length <= NOTES_MAX) set({ notes: next });
+  };
 
   const toggle = (key, value, max) => {
     const current = form[key];
@@ -66,7 +128,13 @@ export default function CreateOrderPage() {
     if (categoryId === form.categoryId) return;
     const next = catalog.categories.find((item) => item.id === categoryId);
     const defaultStyle = next.styles.find((style) => style.default)?.id;
-    set({ categoryId, styleIds: defaultStyle ? [defaultStyle] : [] });
+    setForm((prev) => ({
+      ...prev,
+      categoryId,
+      styleIds: defaultStyle ? [defaultStyle] : [],
+      // Product types are category-scoped too.
+      briefAnswers: { ...prev.briefAnswers, productType: null },
+    }));
   };
 
   // Lowering the pack trims selections that no longer fit.
@@ -82,6 +150,7 @@ export default function CreateOrderPage() {
   const stepValid = [
     files.length > 0 && form.productName.trim().length >= 2,
     Boolean(form.categoryId) && form.styleIds.length > 0,
+    true, // the brief is optional: every question has a default
     form.marketplaceIds.length > 0,
     form.sellerName.trim().length >= 2 && form.whatsapp.replace(/\D/g, '').length >= 9,
   ][step];
@@ -91,7 +160,14 @@ export default function CreateOrderPage() {
     setError(null);
     try {
       const { photos } = await api.uploadPhotos(files);
-      const { order } = await api.createOrder({ ...form, photos });
+      const { briefAnswers, ...fields } = form;
+      const { order } = await api.createOrder({ ...fields, brief: { answers: briefAnswers }, photos });
+      try {
+        // So "Pesanan Saya" can show this seller's orders without asking again.
+        localStorage.setItem('fotoin:whatsapp', form.whatsapp.trim());
+      } catch {
+        /* private mode: they can type the number on the orders page */
+      }
       navigate(`/pesanan/${order.id}`, { state: { justCreated: true } });
     } catch (err) {
       setError(err.message);
@@ -114,7 +190,8 @@ export default function CreateOrderPage() {
     <div className="container" style={{ maxWidth: 860 }}>
       <h1>Buat Pesanan</h1>
       <p className="muted">
-        Empat langkah singkat. Kamu tidak perlu menulis prompt - cukup pilih kategori dan gaya.
+        Lima langkah singkat. Kamu tidak perlu menulis prompt - cukup pilih opsi, dan ceritakan
+        produkmu kalau mau.
       </p>
 
       <Stepper steps={STEPS} current={step} />
@@ -196,7 +273,76 @@ export default function CreateOrderPage() {
 
         {step === 2 && (
           <>
-            <h3>3. Mau dipakai di mana?</h3>
+            <h3>3. Ceritakan produkmu</h3>
+            <Alert tone="info">
+              <strong>Dua cara, dua-duanya oke.</strong> Pilih opsi cepat di bawah saja sudah cukup.
+              Kalau mau hasil lebih pas, tambahkan cerita singkat di kotak paling bawah. Makin
+              lengkap ceritamu, makin mudah kami menyesuaikannya.
+            </Alert>
+
+            {briefQuestions.map((question) => (
+              <div className="brief-question" key={question.id}>
+                <div className="brief-question__label">
+                  <span>{question.label}</span>
+                  <span className="small muted" style={{ fontWeight: 400 }}>
+                    {questionHint(question)}
+                  </span>
+                </div>
+                <ChoiceChips
+                  label={question.label}
+                  options={question.options || []}
+                  multi={question.type === 'multi'}
+                  max={question.max}
+                  value={form.briefAnswers[question.id]}
+                  onChange={(value) => answer(question.id, value)}
+                />
+              </div>
+            ))}
+
+            <hr className="brief-divider" />
+
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label htmlFor="notes">Mau cerita lebih lengkap? (opsional, disarankan)</label>
+              <textarea
+                id="notes"
+                className="textarea"
+                maxLength={NOTES_MAX}
+                placeholder='Contoh: Rendang frozen 500gr untuk Shopee. Warna kemasan merah jangan diubah, tulisan "Halal" harus terbaca. Mau kesan hangat seperti masakan rumah.'
+                value={form.notes}
+                onChange={(event) => set({ notes: event.target.value })}
+              />
+              <div className="char-count">
+                {form.notes.length}/{NOTES_MAX}
+              </div>
+            </div>
+
+            <div className="small muted" style={{ marginBottom: 8 }}>
+              Bingung mulai dari mana? Ketuk untuk menambahkan:
+            </div>
+            <div className="choices" role="group" aria-label="Kalimat cepat untuk cerita produk">
+              {STORY_PHRASES.map((phrase) => (
+                <button
+                  key={phrase}
+                  type="button"
+                  className="choice choice--add"
+                  aria-pressed={form.notes.includes(phrase)}
+                  onClick={() => togglePhrase(phrase)}
+                >
+                  {form.notes.includes(phrase) ? '✓' : '+'} {phrase}
+                </button>
+              ))}
+            </div>
+
+            <p className="hint" style={{ marginTop: 18, marginBottom: 0 }}>
+              Kami berusaha menjaga bentuk, warna, dan tulisan di kemasan produkmu tetap sama, dan
+              reviewer memeriksanya sebelum dikirim.
+            </p>
+          </>
+        )}
+
+        {step === 3 && (
+          <>
+            <h3>4. Mau dipakai di mana?</h3>
             <p className="small muted">
               Kami potong otomatis ke ukuran resmi tiap kanal, jadi kamu tinggal unggah.
             </p>
@@ -226,9 +372,9 @@ export default function CreateOrderPage() {
           </>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <>
-            <h3>4. Pilih paket dan data pengiriman</h3>
+            <h3>5. Pilih paket dan data pengiriman</h3>
             <div className="grid grid-3" style={{ marginBottom: 24 }}>
               {catalog.packs.map((item) => (
                 <OptionTile
@@ -275,17 +421,6 @@ export default function CreateOrderPage() {
                 placeholder="Contoh: Dapur Sari"
                 value={form.storeName}
                 onChange={(event) => set({ storeName: event.target.value })}
-              />
-            </div>
-
-            <div className="field">
-              <label htmlFor="notes">Catatan untuk reviewer (opsional)</label>
-              <textarea
-                id="notes"
-                className="textarea"
-                placeholder="Contoh: tolong warna kemasan jangan diubah, label harus terbaca."
-                value={form.notes}
-                onChange={(event) => set({ notes: event.target.value })}
               />
             </div>
 

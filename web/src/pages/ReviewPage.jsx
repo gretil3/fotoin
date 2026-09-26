@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import api from '../api/client.js';
-import { dateTime } from '../lib/format.js';
+import { briefAnswerText, dateTime } from '../lib/format.js';
 import { Alert, EmptyState, LoadingState, Spinner, StatusBadge } from '../components/ui.jsx';
 
 /**
@@ -10,6 +10,7 @@ import { Alert, EmptyState, LoadingState, Spinner, StatusBadge } from '../compon
  */
 export default function ReviewPage() {
   const [queue, setQueue] = useState(null);
+  const [failed, setFailed] = useState([]);
   const [pipeline, setPipeline] = useState(null);
   const [active, setActive] = useState(null);
   const [rejected, setRejected] = useState(new Set());
@@ -23,6 +24,7 @@ export default function ReviewPage() {
     try {
       const data = await api.review.queue();
       setQueue(data.queue);
+      setFailed(data.failed || []);
       setPipeline(data.pipeline);
       setActive((current) =>
         current ? data.queue.find((order) => order.id === current.id) || null : data.queue[0] || null,
@@ -76,6 +78,20 @@ export default function ReviewPage() {
     }
   };
 
+  const retry = async (order) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.review.retry(order.id);
+      setFlash(`${order.code} dimasukkan lagi ke antrean pembuatan foto.`);
+      await loadQueue();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const reject = async () => {
     if (!note.trim()) {
       setError('Tulis catatan revisi dulu agar proses ulang lebih terarah.');
@@ -114,6 +130,34 @@ export default function ReviewPage() {
 
       {flash && <Alert tone="success">{flash}</Alert>}
       {error && <Alert tone="error">{error}</Alert>}
+
+      {failed.length > 0 && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <h3>Gagal diproses ({failed.length})</h3>
+          <p className="small muted">
+            Pembuatan foto untuk pesanan ini tidak menghasilkan apa-apa. Penjual sudah diberi tahu.
+            Periksa penyebabnya, lalu coba ulang.
+          </p>
+          <div className="grid" style={{ gap: 10 }}>
+            {failed.map((order) => (
+              <div className="row row-between" key={order.id}>
+                <div>
+                  <strong>{order.code}</strong> <span className="small muted">{order.productName}</span>
+                  {order.lastError && <div className="small muted">{order.lastError}</div>}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  disabled={busy}
+                  onClick={() => retry(order)}
+                >
+                  Coba ulang
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {queue === null ? (
         <LoadingState label="Memuat antrean..." />
@@ -161,7 +205,27 @@ export default function ReviewPage() {
                   {active.seller.name} - {active.product.name} - masuk {dateTime(active.createdAt)}
                 </div>
                 {active.product.notes && (
-                  <Alert tone="info">Catatan penjual: {active.product.notes}</Alert>
+                  <Alert tone="info">Cerita penjual: {active.product.notes}</Alert>
+                )}
+                {active.briefSummary && (
+                  <>
+                    <table className="table" style={{ marginTop: 12 }}>
+                      <tbody>
+                        {active.briefSummary.items.map((item) => (
+                          <tr key={item.id}>
+                            {/* "keep" is the QA checklist: what must match the original photo */}
+                            <th>{item.id === 'keep' ? 'Harus dipertahankan' : item.question}</th>
+                            <td>{briefAnswerText(item)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {!active.briefSummary.usedText && (
+                      <div className="small muted" style={{ marginTop: 6 }}>
+                        Penjual hanya memilih opsi cepat, tanpa cerita tambahan.
+                      </div>
+                    )}
+                  </>
                 )}
 
                 <h4 style={{ marginTop: 18 }}>Foto asli</h4>

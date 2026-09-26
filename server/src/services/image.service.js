@@ -3,10 +3,12 @@
  *
  * Two layers:
  *   - A *provider* turns a seller photo + a style preset into a styled image.
- *     `mock` is built in and needs no API key: it cuts the product out of its
- *     original frame, drops it on the style background and adds a soft shadow.
- *     Swap in a real diffusion/editing model by implementing the same
- *     `generate({ sourcePath, style, order })` contract.
+ *     `mock` is built in and needs no API key. It does NOT remove the original
+ *     background: it places the whole photo, as a rectangle, on the style
+ *     backdrop with a soft shadow. It exists to exercise the pipeline, sizing and
+ *     review flow, not to make sellable images. A real background-removal or
+ *     image-edit model must implement the `generate({ sourcePath, style, order })`
+ *     contract before any seller sees output.
  *   - A *renderer* takes that styled image and emits one file per marketplace
  *     output spec (exact pixel dimensions, padded not cropped).
  *
@@ -19,6 +21,7 @@ import path from 'node:path';
 import { nanoid } from 'nanoid';
 import config from '../config/env.js';
 import { getMarketplace, getStyle } from '../data/catalog.js';
+import { planOutputs } from './order.service.js';
 
 let sharp = null;
 let sharpChecked = false;
@@ -117,30 +120,47 @@ const renderOutput = async ({ sourcePath, style, width, height, targetPath }) =>
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Confirms a stored upload is a decodable image and returns its dimensions.
+ * Returns null when sharp is unavailable (degraded mode), so callers skip the
+ * check rather than reject every upload. Throws when the file is not an image
+ * or is a format sharp cannot read (notably HEIC): a spoofed Content-Type
+ * passes multer's filter, this is the check that catches it.
+ */
+export const inspectImage = async (filePath) => {
+  const lib = await loadSharp();
+  if (!lib) return null;
+  const meta = await lib(filePath).metadata();
+  return { width: meta.width, height: meta.height, format: meta.format };
+};
+
+/**
  * Generates every result image for an order.
+ *
+ * Which images are produced is decided by planOutputs(), so the pack's
+ * photoCount is honoured. A render that fails does not abort the batch; it is
+ * reported in `failed` so the pipeline can decide whether what remains is
+ * shippable.
  *
  * @param {object} order
  * @param {(progress: {done: number, total: number}) => void} [onProgress]
- * @returns {Promise<Array>} result records to store on the order
+ * @returns {Promise<{results: Array, failed: Array<{filename: string, error: string}>}>}
  */
 export const generateForOrder = async (order, onProgress) => {
   const outDir = path.join(config.paths.results, order.id);
   await fs.mkdir(outDir, { recursive: true });
 
-  const jobs = [];
-  for (const styleId of order.styleIds) {
-    const style = getStyle(order.product.categoryId, styleId);
-    for (const marketplaceId of order.marketplaceIds) {
-      const marketplace = getMarketplace(marketplaceId);
-      for (const spec of marketplace.outputs) {
-        jobs.push({ style, styleId, marketplace, marketplaceId, spec });
-      }
-    }
-  }
+  const jobs = planOutputs(order).map(({ styleId, marketplaceId, spec }) => ({
+    style: getStyle(order.product.categoryId, styleId),
+    styleId,
+    marketplace: getMarketplace(marketplaceId),
+    marketplaceId,
+    spec,
+  }));
 
   // Cycle through the seller's uploads so every source photo gets used.
   const sources = order.photos;
   const results = [];
+  const failed = [];
 
   if (config.generation.provider === 'mock' && config.generation.mockDelayMs > 0) {
     await sleep(config.generation.mockDelayMs);
@@ -181,12 +201,13 @@ export const generateForOrder = async (order, onProgress) => {
       });
     } catch (error) {
       console.error(`[image] failed to render ${filename}:`, error.message);
+      failed.push({ filename, error: error.message });
     }
 
     onProgress?.({ done: index + 1, total: jobs.length });
   }
 
-  return results;
+  return { results, failed };
 };
 
 /** Deletes every generated file for an order (used before a revision re-run). */

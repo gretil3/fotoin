@@ -6,6 +6,7 @@
  *                     style presets (the seller picks a look, never writes a prompt).
  *   2. MARKETPLACES - exact output specs for Shopee, Tokopedia, TikTok Shop.
  *   3. PACKS        - non-subscription pricing, Rp15.000-Rp25.000 per pack.
+ *   4. BRIEF_QUESTIONS - tap-to-answer questions that stand in for a prompt.
  */
 
 /** @typedef {'kuliner'|'fashion-muslim'|'kerajinan'|'kosmetik'} CategoryId */
@@ -18,6 +19,14 @@ export const CATEGORIES = [
     icon: 'kuliner',
     description: 'Makanan rumahan, frozen food, minuman, snack kemasan.',
     tips: 'Foto dari sudut 45 derajat dengan cahaya jendela. Pastikan makanan terlihat utuh.',
+    // Answers to the brief question "Produk ini apa?" (see BRIEF_QUESTIONS below).
+    productTypes: [
+      { id: 'frozen-kemasan', label: 'Makanan kemasan / frozen', prompt: 'packaged or frozen food shown in its retail packaging' },
+      { id: 'siap-saji', label: 'Makanan siap saji', prompt: 'ready-to-eat dish served on a plate or in a bowl' },
+      { id: 'minuman', label: 'Minuman', prompt: 'beverage in a bottle, cup or can' },
+      { id: 'kue-snack', label: 'Kue & snack', prompt: 'cakes, pastries or packaged snacks' },
+      { id: 'lainnya', label: 'Lainnya', prompt: null },
+    ],
     styles: [
       {
         id: 'studio-putih',
@@ -59,6 +68,13 @@ export const CATEGORIES = [
     icon: 'fashion',
     description: 'Hijab, gamis, koko, mukena, dan busana muslim lainnya.',
     tips: 'Gantung atau setrika produk dulu. Hindari lipatan agar hasil AI lebih rapi.',
+    productTypes: [
+      { id: 'hijab', label: 'Hijab & kerudung', prompt: 'hijab or headscarf, fabric drape and texture clearly visible' },
+      { id: 'gamis', label: 'Gamis & dress', prompt: 'long modest dress (gamis), full length visible' },
+      { id: 'atasan', label: 'Baju koko & atasan', prompt: 'modest shirt or top such as a baju koko' },
+      { id: 'mukena', label: 'Mukena & perlengkapan ibadah', prompt: 'prayer garment (mukena) or prayer accessories' },
+      { id: 'lainnya', label: 'Lainnya', prompt: null },
+    ],
     styles: [
       {
         id: 'studio-putih',
@@ -100,6 +116,13 @@ export const CATEGORIES = [
     icon: 'kerajinan',
     description: 'Anyaman, keramik, ukiran kayu, lilin, dan dekorasi rumah handmade.',
     tips: 'Bersihkan debu pada produk dan ambil foto dari dua sudut berbeda.',
+    productTypes: [
+      { id: 'anyaman', label: 'Anyaman & rotan', prompt: 'handwoven rattan, bamboo or pandan craft' },
+      { id: 'keramik', label: 'Keramik & gerabah', prompt: 'ceramic or earthenware piece' },
+      { id: 'kayu', label: 'Kerajinan kayu', prompt: 'handcrafted wooden item' },
+      { id: 'lilin', label: 'Lilin & aroma', prompt: 'handmade candle or home fragrance product' },
+      { id: 'lainnya', label: 'Lainnya', prompt: null },
+    ],
     styles: [
       {
         id: 'studio-putih',
@@ -141,6 +164,13 @@ export const CATEGORIES = [
     icon: 'kosmetik',
     description: 'Skincare lokal, body care, parfum, dan kosmetik brand sendiri.',
     tips: 'Lap botol agar bebas sidik jari. Pastikan label produk menghadap kamera.',
+    productTypes: [
+      { id: 'skincare', label: 'Skincare (serum, krim, toner)', prompt: 'skincare product in a bottle, jar or tube' },
+      { id: 'makeup', label: 'Makeup', prompt: 'makeup product such as lipstick, cushion or palette' },
+      { id: 'parfum', label: 'Parfum', prompt: 'perfume bottle' },
+      { id: 'bodycare', label: 'Body care & sabun', prompt: 'body care or soap product' },
+      { id: 'lainnya', label: 'Lainnya', prompt: null },
+    ],
     styles: [
       {
         id: 'studio-putih',
@@ -294,6 +324,82 @@ export const PAYMENT_METHODS = [
   { id: 'dana', name: 'DANA', description: 'Bayar langsung dari saldo DANA.' },
 ];
 
+/**
+ * The seller brief: questions answered by tapping, which replace prompt writing.
+ *
+ * `label` is what the seller sees (Bahasa Indonesia). `prompt` is the fragment
+ * the image model will receive (English) and is never sent to the browser.
+ * `prompt: null` means "leave it to us": the answer adds nothing to the prompt.
+ *
+ * Every question is optional. `default` is what an untouched question means,
+ * so a seller who only taps "Lanjut" still places a valid order. Questions with
+ * `perCategory: true` take their options from the category's `productTypes`.
+ *
+ * Bump BRIEF_VERSION whenever a question or option id changes meaning, so pilot
+ * analysis never mixes answers to two different questions.
+ */
+export const BRIEF_VERSION = 1;
+
+export const BRIEF_QUESTIONS = [
+  {
+    id: 'productType',
+    label: 'Produk ini apa?',
+    type: 'single',
+    perCategory: true,
+    default: null,
+  },
+  {
+    id: 'goal',
+    label: 'Foto ini untuk apa?',
+    type: 'single',
+    default: 'auto',
+    options: [
+      { id: 'foto-utama', label: 'Foto utama marketplace', prompt: 'Main listing image: product centered, fully visible and in sharp focus, uncluttered background.' },
+      { id: 'foto-pendukung', label: 'Foto pendukung', prompt: 'Secondary listing image: show the product in context so buyers understand its size and use.' },
+      { id: 'promo', label: 'Banner promo & iklan', prompt: 'Promotional image: bold, eye-catching composition that leaves empty space for text added later. Do not render any text.' },
+      { id: 'sosmed', label: 'Konten Instagram', prompt: 'Social media post: styled, lifestyle-leaning composition.' },
+      { id: 'auto', label: 'Serahkan ke kami', prompt: null },
+    ],
+  },
+  {
+    id: 'keep',
+    label: 'Apa yang tidak boleh berubah?',
+    type: 'multi',
+    // Pre-ticked: changing these is how an AI edit most often ruins a listing.
+    default: ['warna', 'label', 'bentuk'],
+    options: [
+      { id: 'warna', label: 'Warna produk', prompt: 'Keep the product colors exactly as in the source photo.' },
+      { id: 'label', label: 'Tulisan & label di kemasan', prompt: 'Keep every word, number and label printed on the product exactly as in the source photo. Do not redraw, translate or invent text.' },
+      { id: 'bentuk', label: 'Bentuk produk', prompt: 'Keep the product shape and proportions unchanged.' },
+      { id: 'logo', label: 'Logo & merek', prompt: 'Keep logos and brand marks unchanged.' },
+      { id: 'isi', label: 'Jumlah isi', prompt: 'Keep the number of items and the portion size unchanged. Do not add or remove pieces.' },
+    ],
+  },
+  {
+    id: 'mood',
+    label: 'Suasana yang diinginkan?',
+    type: 'multi',
+    max: 2,
+    // Nothing picked means "leave it to us".
+    default: [],
+    options: [
+      { id: 'bersih', label: 'Bersih & profesional', prompt: 'clean, professional look' },
+      { id: 'hangat', label: 'Hangat & rumahan', prompt: 'warm, homely atmosphere' },
+      { id: 'mewah', label: 'Mewah & premium', prompt: 'luxurious, premium feel' },
+      { id: 'segar', label: 'Segar & ceria', prompt: 'fresh, cheerful and bright' },
+      { id: 'natural', label: 'Natural & organik', prompt: 'natural, organic feel' },
+    ],
+  },
+];
+
+/** The brief questions for one category, with per-category options filled in. */
+export const getBriefQuestions = (categoryId) => {
+  const category = CATEGORIES.find((item) => item.id === categoryId);
+  return BRIEF_QUESTIONS.map((question) =>
+    question.perCategory ? { ...question, options: category?.productTypes || [] } : question,
+  );
+};
+
 export const getCategory = (id) => CATEGORIES.find((category) => category.id === id) || null;
 
 export const getStyle = (categoryId, styleId) => {
@@ -306,4 +412,4 @@ export const getMarketplace = (id) => MARKETPLACES.find((market) => market.id ==
 
 export const getPack = (id) => PACKS.find((pack) => pack.id === id) || null;
 
-export default { CATEGORIES, MARKETPLACES, PACKS, PAYMENT_METHODS };
+export default { CATEGORIES, MARKETPLACES, PACKS, PAYMENT_METHODS, BRIEF_QUESTIONS, BRIEF_VERSION };

@@ -5,6 +5,7 @@
  * original photo and either approves the batch (optionally dropping individual
  * bad frames) or sends it back for a re-run with a note.
  */
+import config from '../config/env.js';
 import { orders } from '../data/store.js';
 import { ApiError } from '../utils/api-error.js';
 import { ORDER_STATUS, getOrder, transition } from './order.service.js';
@@ -22,6 +23,24 @@ export const reviewQueue = () =>
       return a.order.createdAt.localeCompare(b.order.createdAt);
     })
     .map(({ order }) => order);
+
+/** Orders whose generation failed and are waiting for staff to retry them. */
+export const failedOrders = () =>
+  orders
+    .find((order) => order.status === ORDER_STATUS.FAILED)
+    .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+
+/** Puts a failed order back through generation. */
+export const retry = (orderId) => {
+  const order = getOrder(orderId);
+  if (order.status !== ORDER_STATUS.FAILED) {
+    throw new ApiError(409, 'Hanya pesanan yang gagal diproses yang bisa dicoba ulang.', {
+      code: 'NOT_FAILED',
+    });
+  }
+  enqueue(order.id);
+  return order;
+};
 
 /**
  * Approve an order and deliver it.
@@ -88,15 +107,19 @@ export const reject = async (orderId, input = {}) => {
     });
   }
 
-  const pack = getPack(order.packId);
-  if (order.revisionCount >= pack.freeRevisions + 1) {
-    throw new ApiError(409, 'Batas revisi untuk paket ini sudah tercapai. Eskalasi ke manual.', {
-      code: 'REVISION_LIMIT',
-    });
+  // A rejection means OUR output was not good enough. It must not use up the
+  // seller's free revisions (those are for when the seller asks for a change).
+  // This cap only stops an endless generate/reject loop.
+  if (order.qaRerunCount >= config.review.maxReruns) {
+    throw new ApiError(
+      409,
+      `Pesanan ini sudah diproses ulang ${config.review.maxReruns}x. Tangani manual atau setujui sebagian foto.`,
+      { code: 'QA_RERUN_LIMIT' },
+    );
   }
 
   orders.update(order.id, {
-    revisionCount: order.revisionCount + 1,
+    qaRerunCount: (order.qaRerunCount || 0) + 1,
     review: {
       reviewer: input.reviewer || 'reviewer',
       decision: 'rejected',
@@ -114,4 +137,4 @@ export const reject = async (orderId, input = {}) => {
   return orders.findById(order.id);
 };
 
-export default { reviewQueue, approve, reject };
+export default { reviewQueue, failedOrders, retry, approve, reject };

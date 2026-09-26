@@ -453,6 +453,72 @@ a.card:hover {
   line-height: 1.45;
 }
 
+/* tap-to-answer chips for the seller brief ("Ceritakan produkmu") */
+.brief-question {
+  margin-bottom: 22px;
+}
+.brief-question__label {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink-700);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.choice:hover:not(:disabled) {
+  border-color: var(--brand-500);
+}
+.choice[aria-pressed='true'] {
+  border-color: var(--brand-500);
+  background: var(--brand-50);
+  color: var(--brand-600);
+}
+.choice:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* phrase shortcuts under the story box: they add a sentence, they are not answers */
+.choice--add {
+  min-height: 34px;
+  padding: 6px 12px;
+  border-style: dashed;
+  font-size: 0.82rem;
+  color: var(--ink-500);
+}
+.brief-divider {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 26px 0 22px;
+}
+.char-count {
+  font-size: 0.8rem;
+  color: var(--ink-500);
+  text-align: right;
+  margin-top: 4px;
+}
+
 .swatch {
   height: 62px;
   border-radius: var(--radius-sm);

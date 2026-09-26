@@ -40,6 +40,10 @@ export const fileSize = (bytes) => {
   return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
 };
 
+/** One brief answer as text: the tapped labels, or "leave it to us" when none. */
+export const briefAnswerText = (item) =>
+  item.answers.length > 0 ? item.answers.join(', ') : 'Serahkan ke kami';
+
 /** Maps an order status to the CSS modifier used by <StatusBadge />. */
 export const statusTone = (status) =>
   ({
@@ -48,6 +52,7 @@ export const statusTone = (status) =>
     diproses_ai: 'info',
     menunggu_review: 'info',
     revisi: 'warning',
+    gagal: 'danger',
     selesai: 'success',
     dibatalkan: 'danger',
   })[status] || 'neutral';

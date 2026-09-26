@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api from '../api/client.js';
-import { dateTime, relativeTime, rupiah } from '../lib/format.js';
+import { briefAnswerText, dateTime, relativeTime, rupiah } from '../lib/format.js';
 import { Alert, LoadingState, Spinner, StatusBadge } from '../components/ui.jsx';
 import Icon from '../components/Icon.jsx';
 
-const LIVE_STATUSES = ['diproses_ai', 'menunggu_review', 'revisi'];
+// Statuses that can change without the seller doing anything. Includes awaiting
+// payment (a real provider confirms via webhook, not via this page) and gagal
+// (staff retry it behind the scenes).
+const LIVE_STATUSES = ['menunggu_pembayaran', 'diproses_ai', 'menunggu_review', 'revisi', 'gagal'];
 
 export default function OrderDetailPage() {
   const { id } = useParams();
@@ -138,6 +141,13 @@ export default function OrderDetailPage() {
             </Alert>
           )}
 
+          {order.status === 'gagal' && (
+            <Alert tone="warning">
+              Ada kendala teknis saat membuat fotomu. Tim kami sudah tahu dan sedang mencoba
+              ulang. Kamu tidak perlu membuat pesanan baru atau membayar lagi.
+            </Alert>
+          )}
+
           {order.status === 'selesai' && (
             <Alert tone="success">
               Selesai! {delivered.length} foto sudah lolos pengecekan dan siap diunggah.
@@ -235,9 +245,24 @@ export default function OrderDetailPage() {
                 </tr>
               </tbody>
             </table>
+            {order.briefSummary && (
+              <>
+                <h4 style={{ marginTop: 18, marginBottom: 6 }}>Cerita produk</h4>
+                <table className="table">
+                  <tbody>
+                    {order.briefSummary.items.map((item) => (
+                      <tr key={item.id}>
+                        <th>{item.question}</th>
+                        <td>{briefAnswerText(item)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
             {order.product.notes && (
               <p className="small muted" style={{ marginTop: 12 }}>
-                Catatan: {order.product.notes}
+                Cerita tambahan: {order.product.notes}
               </p>
             )}
           </div>

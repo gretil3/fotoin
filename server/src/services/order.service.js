@@ -8,6 +8,7 @@
  *     -> diproses_ai           payment settled, generation queued/running
  *     -> menunggu_review       AI output ready, waiting for a human QA pass
  *     -> revisi                reviewer rejected, pipeline re-runs
+ *     -> gagal                 generation produced nothing usable; staff retry it
  *     -> selesai               approved and delivered
  *     -> dibatalkan            cancelled (terminal)
  *
@@ -18,6 +19,7 @@ import { nanoid } from 'nanoid';
 import { orders } from '../data/store.js';
 import { getCategory, getMarketplace, getPack, getStyle } from '../data/catalog.js';
 import { ApiError } from '../utils/api-error.js';
+import { normalizeBrief } from './brief.service.js';
 
 export const ORDER_STATUS = {
   DRAFT: 'draft',
@@ -25,6 +27,7 @@ export const ORDER_STATUS = {
   PROCESSING: 'diproses_ai',
   AWAITING_REVIEW: 'menunggu_review',
   REVISION: 'revisi',
+  FAILED: 'gagal',
   DONE: 'selesai',
   CANCELLED: 'dibatalkan',
 };
@@ -35,6 +38,7 @@ export const STATUS_LABELS = {
   [ORDER_STATUS.PROCESSING]: 'Sedang Diproses AI',
   [ORDER_STATUS.AWAITING_REVIEW]: 'Menunggu Cek Reviewer',
   [ORDER_STATUS.REVISION]: 'Sedang Direvisi',
+  [ORDER_STATUS.FAILED]: 'Kendala Teknis',
   [ORDER_STATUS.DONE]: 'Selesai',
   [ORDER_STATUS.CANCELLED]: 'Dibatalkan',
 };
@@ -45,8 +49,10 @@ const ALLOWED_TRANSITIONS = {
   [ORDER_STATUS.PROCESSING]: [
     ORDER_STATUS.AWAITING_REVIEW,
     ORDER_STATUS.DONE,
+    ORDER_STATUS.FAILED,
     ORDER_STATUS.CANCELLED,
   ],
+  [ORDER_STATUS.FAILED]: [ORDER_STATUS.PROCESSING, ORDER_STATUS.CANCELLED],
   [ORDER_STATUS.AWAITING_REVIEW]: [
     ORDER_STATUS.DONE,
     ORDER_STATUS.REVISION,
@@ -76,6 +82,14 @@ export const transition = (order, to, extra = {}) => {
 const generateOrderCode = () => `FTN-${nanoid(6).toUpperCase().replace(/[-_]/g, 'X')}`;
 
 /**
+ * True for a bare filename with no path parts. Photo filenames end up in
+ * path.join(uploadsDir, filename), so anything containing a separator or a
+ * leading dot could read outside the uploads directory.
+ */
+export const isSafeFilename = (name) =>
+  typeof name === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,200}$/.test(name) && !name.includes('..');
+
+/**
  * Validates a brief against the chosen pack and builds the order record.
  * Throws ApiError(422) with a Bahasa Indonesia message on any violation.
  */
@@ -88,6 +102,11 @@ export const createOrder = (input) => {
 
   if (!input.photos?.length) {
     throw new ApiError(422, 'Minimal unggah 1 foto produk.', { code: 'NO_PHOTOS' });
+  }
+  if (!input.photos.every((photo) => isSafeFilename(photo.filename))) {
+    throw new ApiError(422, 'Nama file foto tidak valid. Unggah ulang fotonya.', {
+      code: 'BAD_PHOTO_FILENAME',
+    });
   }
 
   const styleIds = [...new Set(input.styleIds || [])];
@@ -126,6 +145,9 @@ export const createOrder = (input) => {
     });
   }
 
+  const notes = input.notes?.trim() || null;
+  const brief = normalizeBrief(category.id, input.brief, notes);
+
   const now = new Date().toISOString();
   const order = {
     id: nanoid(12),
@@ -143,8 +165,12 @@ export const createOrder = (input) => {
     product: {
       name: input.productName?.trim() || 'Produk',
       categoryId: category.id,
-      notes: input.notes?.trim() || null,
+      // The seller's own words about the product (optional). Part of the brief.
+      notes,
     },
+
+    // Tap answers standing in for a prompt: { version, answers, usedText }.
+    brief,
 
     packId: pack.id,
     priceIdr: pack.priceIdr,
@@ -156,7 +182,10 @@ export const createOrder = (input) => {
     payment: null,
     results: [],
     review: null,
+    // revisionCount: revisions the *seller* asked for (counts against freeRevisions).
+    // qaRerunCount: times a reviewer sent it back because *our* output was bad.
     revisionCount: 0,
+    qaRerunCount: 0,
     deliveredAt: null,
     dueAt: new Date(Date.now() + pack.turnaroundHours * 3600_000).toISOString(),
     timeline: [{ status: ORDER_STATUS.DRAFT, at: now, note: 'Pesanan dibuat.' }],
@@ -176,6 +205,14 @@ export function normalizeWhatsapp(raw) {
   return digits;
 }
 
+/** 6281234567890 -> 62812****890. For responses that anyone holding an order id can read. */
+export const maskWhatsapp = (number) => {
+  if (!number) return number;
+  const digits = String(number);
+  if (digits.length <= 7) return '*'.repeat(digits.length);
+  return `${digits.slice(0, 5)}${'*'.repeat(digits.length - 8)}${digits.slice(-3)}`;
+};
+
 export const getOrder = (id) => {
   const order = orders.findById(id) || orders.findOne((row) => row.code === id);
   if (!order) throw new ApiError(404, 'Pesanan tidak ditemukan.', { code: 'ORDER_NOT_FOUND' });
@@ -192,14 +229,39 @@ export const listOrders = ({ status, whatsapp } = {}) => {
   return [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 };
 
-/** How many images the pipeline should produce, capped by the pack. */
-export const plannedOutputCount = (order) => {
+/**
+ * The exact list of images the pipeline may render for an order, capped at the
+ * pack's photoCount. The generator and the "N photos planned" figure both read
+ * this, so what a seller was promised and what we spend money producing cannot
+ * drift apart.
+ *
+ * Ordering matters when the cap bites: every style x marketplace pair gets its
+ * primary output first, and secondary sizes (promo cover, thumbnail, story...)
+ * only fill whatever budget is left. That way a cut never removes a whole
+ * marketplace or style the seller picked.
+ *
+ * @returns {Array<{styleId: string, marketplaceId: string, spec: object}>}
+ */
+export const planOutputs = (order) => {
   const pack = getPack(order.packId);
-  const perStyle = order.marketplaceIds
-    .map((id) => getMarketplace(id)?.outputs.length || 0)
-    .reduce((sum, count) => sum + count, 0);
-  return Math.min(pack.photoCount, order.styleIds.length * perStyle);
+  if (!pack) return [];
+  const marketplaces = order.marketplaceIds.map((id) => getMarketplace(id)).filter(Boolean);
+  const tiers = Math.max(0, ...marketplaces.map((market) => market.outputs.length));
+
+  const jobs = [];
+  for (let tier = 0; tier < tiers; tier += 1) {
+    for (const styleId of order.styleIds) {
+      for (const marketplace of marketplaces) {
+        const spec = marketplace.outputs[tier];
+        if (spec) jobs.push({ styleId, marketplaceId: marketplace.id, spec });
+      }
+    }
+  }
+  return jobs.slice(0, pack.photoCount);
 };
+
+/** How many images the pipeline will produce, capped by the pack. */
+export const plannedOutputCount = (order) => planOutputs(order).length;
 
 export default {
   ORDER_STATUS,
@@ -209,6 +271,9 @@ export default {
   listOrders,
   transition,
   canTransition,
+  planOutputs,
   plannedOutputCount,
   normalizeWhatsapp,
+  maskWhatsapp,
+  isSafeFilename,
 };

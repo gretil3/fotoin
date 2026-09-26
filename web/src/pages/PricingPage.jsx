@@ -16,7 +16,7 @@ const faqs = [
   },
   {
     q: 'Apakah saya perlu menulis prompt AI?',
-    a: 'Tidak. Kamu cukup pilih kategori produk dan gaya foto. Prompt-nya sudah kami siapkan per kategori.',
+    a: 'Tidak. Kamu cukup pilih kategori, gaya foto, dan jawab beberapa pertanyaan singkat dengan sekali ketuk. Kalau mau, ceritakan produkmu dengan kata-katamu sendiri. Prompt-nya kami yang susun.',
   },
   {
     q: 'Bayarnya lewat apa?',

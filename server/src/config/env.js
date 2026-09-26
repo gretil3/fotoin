@@ -4,6 +4,11 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(here, '..', '..');
+// STORAGE_DIR lets tests (and containers with a mounted volume) keep uploads,
+// results and the db somewhere other than the repo checkout.
+const storageRoot = process.env.STORAGE_DIR
+  ? path.resolve(process.env.STORAGE_DIR)
+  : path.join(serverRoot, 'storage');
 
 const bool = (value, fallback = false) => {
   if (value === undefined || value === '') return fallback;
@@ -19,6 +24,7 @@ export const config = {
   env: process.env.NODE_ENV || 'development',
   port: int(process.env.PORT, 4000),
   publicUrl: (process.env.PUBLIC_URL || 'http://localhost:4000').replace(/\/$/, ''),
+  webUrl: (process.env.WEB_URL || 'http://localhost:5173').replace(/\/$/, ''),
   corsOrigin: (process.env.CORS_ORIGIN || 'http://localhost:5173')
     .split(',')
     .map((origin) => origin.trim())
@@ -26,10 +32,10 @@ export const config = {
 
   paths: {
     root: serverRoot,
-    storage: path.join(serverRoot, 'storage'),
-    uploads: path.join(serverRoot, 'storage', 'uploads'),
-    results: path.join(serverRoot, 'storage', 'results'),
-    db: path.join(serverRoot, 'storage', 'db.json'),
+    storage: storageRoot,
+    uploads: path.join(storageRoot, 'uploads'),
+    results: path.join(storageRoot, 'results'),
+    db: path.join(storageRoot, 'db.json'),
   },
 
   uploads: {
@@ -48,6 +54,9 @@ export const config = {
   review: {
     required: bool(process.env.REQUIRE_HUMAN_REVIEW, true),
     token: process.env.REVIEWER_TOKEN || 'dev-reviewer-token',
+    // How many times a reviewer may send one order back to the generator. This is
+    // a loop guard on *our* quality failures, not the seller's free revisions.
+    maxReruns: int(process.env.REVIEW_MAX_RERUNS, 2),
   },
 
   whatsapp: {

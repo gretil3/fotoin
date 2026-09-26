@@ -26,24 +26,29 @@ be different in production is isolated behind a module boundary, listed under
 ## Request flow: creating an order
 
 ```
-POST /api/v1/uploads          multer writes to storage/uploads, returns photo descriptors
+POST /api/v1/uploads          multer writes to storage/uploads, each file is decoded to prove it
+        │                     is an image, and recorded; returns photo descriptors
         │
-POST /api/v1/orders           zod validates shape
+POST /api/v1/orders           zod validates shape; photo ids are resolved to the server's own
+        │                     upload records (never client-supplied filenames)
         │                     order.service.createOrder validates against the paid pack
         │                     status: draft ──► menunggu_pembayaran
         │                     payment.service.createCharge issues a QRIS payload
         │                     whatsapp.service sends "order received"
         │
-POST /api/v1/orders/:id/pay   (in production: the provider webhook, not the client)
-        │                     status ──► diproses_ai
+POST /api/v1/orders/:id/pay   (mock provider only; in production the provider webhook)
+        │                     checkout.service.confirmPayment: shared with the webhook
+        │                     status ──► diproses_ai, dueAt restarts from payment
         │                     pipeline.service.enqueue(orderId)
         │
-   [async] pipeline           image.service.generateForOrder
-        │                       for each style × marketplace × output spec:
-        │                         background SVG + contact shadow + product, composited
-        │                         written at the exact spec dimensions
+   [async] pipeline           order.service.planOutputs decides WHAT to render, capped at
+        │                     the pack's photoCount (primary sizes first)
+        │                     image.service.generateForOrder renders exactly that list:
+        │                       background SVG + contact shadow + photo, composited
+        │                       written at the exact spec dimensions
         │                     progress written to the order as it goes
-        │                     status ──► menunggu_review
+        │                     zero images rendered ──► status gagal (never reaches review)
+        │                     otherwise            ──► status menunggu_review
         │
 GET  /api/v1/review/queue     reviewer console polls (priority packs first)
 POST /api/v1/review/:id/approve
@@ -103,6 +108,41 @@ concurrency of 2, writing `progress: {done, total}` to the order as it works; th
 polls every 3 seconds while the order is in a live state. Swapping in a real queue does not
 change the API contract.
 
+### The queue is memory, the orders are not
+
+A restart forgets the in-memory queue but not the database, so `index.js` calls
+`recoverInterruptedJobs()` at boot to re-enqueue every order still in `diproses_ai` or
+`revisi`. `enqueue` ignores an order that is already waiting, so recovery cannot double a job.
+A job that fails does not leave the order stranded in `diproses_ai`: it moves to `gagal`,
+which staff can retry. When the queue moves to BullMQ the durable queue replaces this.
+
+### One planner decides what gets generated
+
+`planOutputs()` in `order.service.js` is the only place that decides which images an order
+gets. The generator renders that list and the "N photos planned" figure reads its length, so
+what a seller was promised and what we pay to produce cannot drift apart.
+
+### The seller brief stands in for a prompt
+
+Sellers never write a prompt. They answer a few questions by tapping (`BRIEF_QUESTIONS` and
+each category's `productTypes` in `catalog.js`) and may add their own words in
+`product.notes`. Each option carries a Bahasa `label` for the seller and an English `prompt`
+fragment for the image model. `brief.service.js` validates answers against those option ids,
+so the only prompt text a tap can produce is text we wrote. The free text is kept apart and
+must be treated as a description, never as instructions. Prompt fragments are stripped from
+every public catalog response.
+
+The brief is stored as `{ version, answers, usedText }`. `usedText` (did the seller write their
+own words?) is derived server-side so the pilot can compare rejection rates and QA time
+between the two ways of filling it in. Nothing consumes the fragments yet: assembling them
+into a prompt arrives with the first real image provider.
+
+### Public vs. staff views of an order
+
+Anyone holding an order id or `FTN-` code can read the order, so the public response masks
+the seller's number and omits `lastError` (which can contain server paths). Staff routes
+under `/review` return the full record.
+
 ## Swap points
 
 Each row is isolated to one file. Nothing outside it needs to change.
@@ -124,15 +164,23 @@ Order {
   id, code,                    // code is the FTN-XXXXXX the seller quotes over WhatsApp
   status, timeline[],          // every transition, with a timestamp and a note
   seller:  { name, whatsapp, storeName },
-  product: { name, categoryId, notes },
+  product: { name, categoryId, notes },   // notes: the seller's own words (optional)
+  brief:   { version, answers, usedText }, // tap answers as option ids; null on older orders
   packId, priceIdr,
   styleIds[], marketplaceIds[],
   photos[],                    // what the seller uploaded
   payment,                     // charge record: method, qrPayload, status, paidAt
   results[],                   // generated images; `approved` is null until reviewed
   review,                      // reviewer, decision, note, counts, reviewedAt
-  revisionCount, dueAt, deliveredAt, progress
+  revisionCount,               // revisions the SELLER asked for (counts against freeRevisions)
+  qaRerunCount,                // times a reviewer sent it back: our own quality failures
+  dueAt,                       // restarts when payment is confirmed
+  deliveredAt, progress,
+  lastError                    // raw failure reason, staff-only
 }
+
+Upload { id, filename, originalName, mimeType, bytes, width, height, url, uploadedAt }
+                               // the server's record of every accepted file; orders reference these
 ```
 
 `results[].approved` is tri-state on purpose: `null` = not yet reviewed, `true` = delivered,

@@ -17,6 +17,7 @@ app, that is a bug in this repo — please report it rather than working around 
 | Change | File |
 |---|---|
 | Add a style preset, a marketplace, or change a price | `server/src/data/catalog.js` |
+| Add or change a brief question or its options | `catalog.js` (`BRIEF_QUESTIONS`, or a category's `productTypes`); bump `BRIEF_VERSION` if an id changes meaning |
 | Change a business rule | `server/src/services/*.service.js` |
 | Add an endpoint | `server/src/routes/*.routes.js` (thin — logic lives in a service) |
 | Change how images are made or sized | `server/src/services/image.service.js` |
@@ -56,6 +57,10 @@ Keeping it that way is a feature — this codebase gets handed to people who did
 ## Testing
 
 Tests use `node:test` — no framework, no config.
+
+**Every test file that imports config, the store or the app must `import './setup.js'` as its
+first import.** It points storage at a temp directory. Skip it and the store writes the test
+fixtures over your real `server/storage/db.json`.
 
 - Business rules → a unit test next to the logic (`tests/order.service.test.js`)
 - Anything crossing HTTP, middleware or the queue → extend `tests/pipeline.e2e.test.js`

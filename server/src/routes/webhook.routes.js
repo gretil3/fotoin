@@ -11,9 +11,9 @@ import config from '../config/env.js';
 import { asyncHandler } from '../middleware/index.js';
 import { ApiError } from '../utils/api-error.js';
 import { orders as orderStore } from '../data/store.js';
-import { ORDER_STATUS, normalizeWhatsapp, transition } from '../services/order.service.js';
+import { ORDER_STATUS, normalizeWhatsapp } from '../services/order.service.js';
+import { confirmPayment } from '../services/checkout.service.js';
 import payments from '../services/payment.service.js';
-import { enqueue } from '../services/pipeline.service.js';
 import whatsapp from '../services/whatsapp.service.js';
 
 const router = Router();
@@ -94,13 +94,7 @@ router.post(
       return res.json({ ok: true, ignored: true, reason: 'already_processed' });
     }
 
-    orderStore.update(order.id, { payment: payments.settleCharge(order.payment) });
-    const updated = transition(orderStore.findById(order.id), ORDER_STATUS.PROCESSING, {
-      note: 'Pembayaran dikonfirmasi provider.',
-    });
-
-    await whatsapp.sendMessage(updated, whatsapp.templates.paymentReceived(updated), 'payment');
-    enqueue(updated.id);
+    const updated = await confirmPayment(order.id, 'Pembayaran dikonfirmasi provider.');
 
     res.json({ ok: true, orderId: updated.id, status: updated.status });
   }),

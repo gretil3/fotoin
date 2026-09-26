@@ -77,10 +77,14 @@ export const api = {
     request(`/orders/${id}/pay`, { method: 'POST', body: { paymentMethodId } }),
   cancelOrder: (id, reason) => request(`/orders/${id}/cancel`, { method: 'POST', body: { reason } }),
   getResults: (id) => request(`/orders/${id}/results`),
-  messages: (orderId) => request(`/messages${orderId ? `?orderId=${orderId}` : ''}`),
+  // Staff-only: the outbox contains every seller's phone number.
+  messages: (orderId) =>
+    request(`/messages${orderId ? `?orderId=${orderId}` : ''}`, { headers: reviewerHeaders() }),
 
   review: {
     queue: () => request('/review/queue', { headers: reviewerHeaders() }),
+    retry: (orderId) =>
+      request(`/review/${orderId}/retry`, { method: 'POST', headers: reviewerHeaders() }),
     get: (orderId) => request(`/review/${orderId}`, { headers: reviewerHeaders() }),
     approve: (orderId, payload) =>
       request(`/review/${orderId}/approve`, {

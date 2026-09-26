@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import config from '../config/env.js';
 
-const EMPTY_DB = { orders: [], reviews: [], messages: [] };
+const EMPTY_DB = { orders: [], reviews: [], messages: [], uploads: [] };
 
 let db = null;
 let writeScheduled = false;
@@ -33,20 +33,31 @@ const load = () => {
   return db;
 };
 
+const writeNow = () => {
+  if (!db) return;
+  try {
+    const tmp = `${config.paths.db}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
+    fs.renameSync(tmp, config.paths.db);
+  } catch (error) {
+    console.error('[store] failed to persist db:', error.message);
+  }
+};
+
 /** Debounced write: many mutations per request collapse into one flush. */
 const persist = () => {
   if (writeScheduled) return;
   writeScheduled = true;
   setTimeout(() => {
     writeScheduled = false;
-    try {
-      const tmp = `${config.paths.db}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
-      fs.renameSync(tmp, config.paths.db);
-    } catch (error) {
-      console.error('[store] failed to persist db:', error.message);
-    }
+    writeNow();
   }, 50).unref?.();
+};
+
+/** Writes any pending mutation immediately. Call before the process exits. */
+export const flush = () => {
+  writeScheduled = false;
+  writeNow();
 };
 
 export const collection = (name) => ({
@@ -87,10 +98,12 @@ export const collection = (name) => ({
 
 export const orders = collection('orders');
 export const messages = collection('messages');
+/** Every file the server accepted via POST /uploads; orders may only reference these. */
+export const uploads = collection('uploads');
 
 /** Test helper: wipes in-memory state without touching the on-disk file. */
 export const __resetForTests = () => {
   db = structuredClone(EMPTY_DB);
 };
 
-export default { orders, messages, collection };
+export default { orders, messages, uploads, collection, flush };

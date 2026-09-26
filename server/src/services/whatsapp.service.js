@@ -8,6 +8,7 @@
  */
 import config from '../config/env.js';
 import { messages } from '../data/store.js';
+import { getPack } from '../data/catalog.js';
 import { nanoid } from 'nanoid';
 import { STATUS_LABELS } from './order.service.js';
 
@@ -19,7 +20,7 @@ export const templates = {
       `Halo ${order.seller.name}! Pesanan *${order.code}* sudah kami terima.`,
       ``,
       `Produk: ${order.product.name}`,
-      `Paket: ${order.packId} (${rupiah(order.priceIdr)})`,
+      `Paket: ${getPack(order.packId)?.name || order.packId} (${rupiah(order.priceIdr)})`,
       `Foto masuk: ${order.photos.length}`,
       ``,
       `Silakan selesaikan pembayaran lewat QRIS agar kami mulai proses. Terima kasih!`,
@@ -43,7 +44,7 @@ export const templates = {
       ``,
       `${order.results.filter((result) => result.approved !== false).length} foto sudah dipotong sesuai ukuran ${order.marketplaceIds.join(', ')}.`,
       ``,
-      `Unduh di sini: ${config.publicUrl.replace(':4000', ':5173')}/pesanan/${order.id}`,
+      `Unduh di sini: ${config.webUrl}/pesanan/${order.id}`,
       ``,
       `Kalau ada yang kurang pas, balas pesan ini. Revisi kami bantu.`,
     ].join('\n'),
@@ -54,6 +55,9 @@ export const templates = {
       note ? `\nCatatan: ${note}` : '',
       `\nKami kabari lagi setelah versi barunya siap.`,
     ].join(''),
+
+  delayed: (order) =>
+    `Maaf, pesanan *${order.code}* ada kendala teknis saat diproses. Tim kami sedang menanganinya dan akan mengabari kamu secepatnya.`,
 
   statusUpdate: (order) => `Update pesanan *${order.code}*: ${STATUS_LABELS[order.status]}.`,
 };

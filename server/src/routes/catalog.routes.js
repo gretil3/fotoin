@@ -1,14 +1,19 @@
 import { Router } from 'express';
-import { CATEGORIES, MARKETPLACES, PACKS, PAYMENT_METHODS } from '../data/catalog.js';
+import { MARKETPLACES, PACKS, PAYMENT_METHODS } from '../data/catalog.js';
 import { queueStats } from '../services/pipeline.service.js';
+import { publicBriefQuestions, publicCategories } from '../services/brief.service.js';
 import config from '../config/env.js';
 
 const router = Router();
 
-/** GET /api/v1/catalog - everything the wizard needs in one round trip. */
+/**
+ * GET /api/v1/catalog - everything the wizard needs in one round trip.
+ * Categories and brief questions go out without their hidden prompt fragments.
+ */
 router.get('/catalog', (_req, res) => {
   res.json({
-    categories: CATEGORIES,
+    categories: publicCategories(),
+    briefQuestions: publicBriefQuestions(),
     marketplaces: MARKETPLACES,
     packs: PACKS,
     paymentMethods: PAYMENT_METHODS,
@@ -20,7 +25,7 @@ router.get('/catalog', (_req, res) => {
   });
 });
 
-router.get('/categories', (_req, res) => res.json({ categories: CATEGORIES }));
+router.get('/categories', (_req, res) => res.json({ categories: publicCategories() }));
 router.get('/marketplaces', (_req, res) => res.json({ marketplaces: MARKETPLACES }));
 router.get('/packs', (_req, res) => res.json({ packs: PACKS }));
 

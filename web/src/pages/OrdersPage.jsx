@@ -2,18 +2,40 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client.js';
 import { dateTime } from '../lib/format.js';
-import { Alert, EmptyState, LoadingState, StatusBadge } from '../components/ui.jsx';
+import { Alert, EmptyState, StatusBadge } from '../components/ui.jsx';
+
+// Same key CreateOrderPage writes after an order is placed.
+const REMEMBERED_PHONE_KEY = 'fotoin:whatsapp';
+
+const rememberedPhone = () => {
+  try {
+    return localStorage.getItem(REMEMBERED_PHONE_KEY) || '';
+  } catch {
+    return '';
+  }
+};
 
 export default function OrdersPage() {
+  // null = nothing looked up yet. The API no longer lists everyone's orders, so
+  // a seller finds theirs by WhatsApp number (remembered from their last order).
   const [orders, setOrders] = useState(null);
   const [error, setError] = useState(null);
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(rememberedPhone);
 
   const load = async (whatsapp) => {
     setError(null);
+    if (!whatsapp) {
+      setOrders(null);
+      return;
+    }
     try {
-      const data = await api.listOrders(whatsapp ? { whatsapp } : {});
+      const data = await api.listOrders({ whatsapp });
       setOrders(data.orders);
+      try {
+        localStorage.setItem(REMEMBERED_PHONE_KEY, whatsapp);
+      } catch {
+        /* private mode: not remembering the number is fine */
+      }
     } catch (err) {
       setError(err.message);
       setOrders([]);
@@ -21,13 +43,16 @@ export default function OrdersPage() {
   };
 
   useEffect(() => {
-    load();
+    load(rememberedPhone());
   }, []);
 
   return (
     <div className="container">
       <h1>Pesanan Saya</h1>
-      <p className="muted">Pantau status pesanan dan unduh hasil foto yang sudah selesai.</p>
+      <p className="muted">
+        Masukkan nomor WhatsApp yang kamu pakai saat memesan untuk melihat status dan mengunduh
+        hasil foto.
+      </p>
 
       <form
         className="row"
@@ -54,7 +79,12 @@ export default function OrdersPage() {
             type="button"
             onClick={() => {
               setPhone('');
-              load();
+              setOrders(null);
+              try {
+                localStorage.removeItem(REMEMBERED_PHONE_KEY);
+              } catch {
+                /* ignore */
+              }
             }}
           >
             Reset
@@ -65,7 +95,9 @@ export default function OrdersPage() {
       {error && <Alert tone="error">{error}</Alert>}
 
       {orders === null ? (
-        <LoadingState />
+        <EmptyState title="Cari pesananmu">
+          Ketik nomor WhatsApp di atas, lalu tekan Cari.
+        </EmptyState>
       ) : orders.length === 0 ? (
         <EmptyState
           title="Belum ada pesanan"

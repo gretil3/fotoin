@@ -55,10 +55,16 @@ Kerajinan, Skincare) and a style preset; the prompt and background treatment are
 
 ```
 draft ──► menunggu_pembayaran ──► diproses_ai ──► menunggu_review ──► selesai
-                                       ▲                 │
-                                       └──── revisi ◄────┘
+                                       ▲  │                │
+                                       │  └──► gagal       │
+                                       │        │          │
+                                       ├────────┘ (staff retry)
+                                       └──── revisi ◄──────┘
                     (any non-terminal state) ──► dibatalkan
 ```
+
+`gagal` means generation produced nothing usable; staff retry it from the reviewer console
+and the seller is never asked to pay again. An empty batch is never sent to a reviewer.
 
 `menunggu_review` is not optional — it is the product. Nothing reaches a seller that a
 person has not looked at. (`REQUIRE_HUMAN_REVIEW=false` exists for load testing only.)
@@ -114,7 +120,7 @@ npm run dev
 6. Click any frame you consider bad to mark it rejected, then **Setujui & kirim**.
 7. Back on the order page: the approved images are there, sized per marketplace, with
    download links. The WhatsApp message the seller would have received is printed in the
-   server console and available at `GET /api/v1/messages`.
+   server console and available to staff at `GET /api/v1/messages` (reviewer token required).
 
 ### Commands
 
@@ -160,7 +166,7 @@ fotoin/
 │       ├── components/             Layout, UploadDropzone, shared UI
 │       ├── pages/
 │       │   ├── HomePage.jsx        Landing + pitch
-│       │   ├── CreateOrderPage.jsx ★ 4-step seller wizard
+│       │   ├── CreateOrderPage.jsx ★ 5-step seller wizard (incl. the brief step)
 │       │   ├── OrderDetailPage.jsx Live status, QRIS, downloads
 │       │   ├── OrdersPage.jsx      Order list / lookup by phone
 │       │   ├── PricingPage.jsx     Packs + FAQ
@@ -195,6 +201,9 @@ All variables have working defaults — the app runs with no `.env` at all. Full
 | `WHATSAPP_ENABLED` | `false` | When off, messages are logged and stored, not sent |
 | `PAYMENT_PROVIDER` | `mock` | Issues a fake QRIS payload |
 | `MAX_UPLOAD_MB` / `MAX_FILES_PER_ORDER` | `10` / `5` | Upload limits |
+| `REVIEW_MAX_RERUNS` | `2` | How often a reviewer may send one order back to the generator |
+| `STORAGE_DIR` | `server/storage` | Where uploads, results and `db.json` live (tests point this at a temp dir) |
+| `WEB_URL` | `http://localhost:5173` | Base of the download link sent in the WhatsApp delivery message |
 
 ### Plugging in a real image model
 
@@ -219,17 +228,24 @@ keep working regardless of which model produces the image.
 npm test
 ```
 
-29 tests across three files, no test framework dependency (`node:test` only):
+60 tests across three files, no test framework dependency (`node:test` only). Tests run
+against a throwaway temp directory (`tests/setup.js`), so they never touch your real
+`server/storage/db.json`.
 
 - `tests/catalog.test.js` — catalog integrity: four verticals, unique style ids, pricing
-  stays inside the Rp15.000–Rp25.000 band, packs improve monotonically with price.
-- `tests/order.service.test.js` — phone normalisation, pack-limit validation, and the status
+  stays inside the Rp15.000–Rp25.000 band, packs improve monotonically with price, and every
+  brief question and option is well formed (labels, prompt fragments, valid defaults).
+- `tests/order.service.test.js` — phone normalisation and masking, pack-limit validation,
+  the seller brief (defaults, unknown options refused, `usedText` derived server-side), the
+  output planner (the pack's photo count is a hard cap), unsafe filenames, and the status
   machine (including that illegal jumps are refused).
 - `tests/pipeline.e2e.test.js` — boots the real app on an ephemeral port and walks the whole
   journey over HTTP: upload → order → pay → generate → review → deliver, asserting that the
-  rendered files match each marketplace's pixel spec, that the reviewer endpoint is
-  staff-only, that rejected frames are withheld from the seller, and that a rejection
-  re-enters the pipeline.
+  rendered files match each marketplace's pixel spec, that reviewer/outbox/list endpoints are
+  staff-only, that rejected frames are withheld from the seller, that a rejection re-enters
+  the pipeline (with a bounded number of reruns), that fake or forged uploads are refused,
+  that an empty generation fails the order instead of reaching review, and that orders
+  interrupted by a restart are picked back up.
 
 ---
 
@@ -240,8 +256,13 @@ This is a pilot-grade codebase. Before real sellers touch it:
 - [ ] Replace `src/data/store.js` with Postgres (Prisma) — the interface already matches
 - [ ] Move uploads and results to S3/GCS with signed URLs instead of local disk
 - [ ] Replace the in-process queue in `pipeline.service.js` with BullMQ + Redis
-- [ ] Real seller authentication (WhatsApp OTP), and real reviewer accounts with roles
-- [ ] Drive payment settlement **only** from the provider webhook; delete `POST /orders/:id/pay`
+- [ ] Real seller authentication (WhatsApp OTP), and real reviewer accounts with roles. Until
+      then `GET /orders` needs a phone number and returns masked numbers, and the reviewer
+      token is a `VITE_` variable that ships inside the public JS bundle: it is not a secret
+- [ ] Real image generation: the `mock` provider pastes the original photo, background
+      included, onto the style backdrop. It is a pipeline test double, not a product
+- [ ] Drive payment settlement **only** from the provider webhook (the `/pay` shortcut already
+      answers 404 once `PAYMENT_PROVIDER` is not `mock`; the mock webhook still accepts anything)
 - [ ] Verify the WhatsApp webhook signature (`X-Hub-Signature-256`)
 - [ ] Rate limiting, request size limits at the edge, and structured logging
 - [ ] Retention policy for seller photos, plus a privacy notice in Bahasa Indonesia
