@@ -20,6 +20,9 @@ const int = (value, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const imageProvider = (process.env.IMAGE_PROVIDER || 'mock').trim().toLowerCase();
+const refinerProvider = (process.env.REFINER_PROVIDER || 'rules').trim().toLowerCase();
+
 export const config = {
   env: process.env.NODE_ENV || 'development',
   port: int(process.env.PORT, 4000),
@@ -49,6 +52,21 @@ export const config = {
     apiKey: process.env.IMAGE_PROVIDER_API_KEY || '',
     model: process.env.IMAGE_PROVIDER_MODEL || '',
     mockDelayMs: int(process.env.MOCK_GENERATION_DELAY_MS, 2500),
+  },
+
+  // Reads the seller's own words (product notes) before generation.
+  refiner: {
+    // rules = built in and offline (default). gemini = an AI model also reads the
+    // notes. Any failure falls back to the rules, so an order is never blocked.
+    provider: refinerProvider,
+    // When the refiner and the image step use the same vendor, the image key is
+    // reused so there is only one secret to manage.
+    apiKey:
+      process.env.REFINER_API_KEY ||
+      (refinerProvider === imageProvider ? process.env.IMAGE_PROVIDER_API_KEY || '' : ''),
+    // Empty = the provider's default (refiners/gemini.js: DEFAULT_MODEL).
+    model: process.env.REFINER_MODEL || '',
+    timeoutMs: int(process.env.REFINER_TIMEOUT_MS, 8000),
   },
 
   review: {

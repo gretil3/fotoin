@@ -4,6 +4,8 @@ import { STATUS_LABELS, getOrder } from '../services/order.service.js';
 import review from '../services/review.service.js';
 import { queueStats } from '../services/pipeline.service.js';
 import { describeBrief } from '../services/brief.service.js';
+import { buildOrderPrompts } from '../services/prompt.service.js';
+import { resolveRefinement } from '../services/refine.service.js';
 
 const router = Router();
 
@@ -57,6 +59,26 @@ router.get(
   '/review/:orderId',
   asyncHandler(async (req, res) => {
     res.json({ order: staffView(getOrder(req.params.orderId)) });
+  }),
+);
+
+/**
+ * GET /api/v1/review/:orderId/prompts
+ * The exact prompt each chosen style sends to the image model, and the
+ * refinement of the seller's words it was built from. Staff-only: prompt text
+ * is part of how FOTOIN gets its results and never reaches sellers.
+ */
+router.get(
+  '/review/:orderId/prompts',
+  asyncHandler(async (req, res) => {
+    const order = getOrder(req.params.orderId);
+    const refinement = resolveRefinement(order);
+    res.json({
+      orderId: order.id,
+      code: order.code,
+      refinement,
+      prompts: buildOrderPrompts(order, { refinement }),
+    });
   }),
 );
 

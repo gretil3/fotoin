@@ -134,14 +134,49 @@ every public catalog response.
 
 The brief is stored as `{ version, answers, usedText }`. `usedText` (did the seller write their
 own words?) is derived server-side so the pilot can compare rejection rates and QA time
-between the two ways of filling it in. Nothing consumes the fragments yet: assembling them
-into a prompt arrives with the first real image provider.
+between the two ways of filling it in.
+
+### The seller's own words are screened, then refined
+
+`refine.service.js` handles `product.notes` (and the product name) before any of it reaches a
+model. It is pure: no network, no clock.
+
+1. **Screening.** The text is cut into pieces at sentence ends, line breaks, ", ", joining words
+   and polite openers ("tolong"). A piece that instructs the AI ("abaikan aturan", "ignore
+   previous instructions", a forged `RULES` heading) or asks for what we never do (add text, a
+   logo or a price; add people or a model; change the product's colour, shape or label) is
+   dropped with a reason code; the rest of the text stays byte for byte. Negations ("jangan
+   tambahkan logo", "tanpa orang") are kept: they agree with our rules. An attack spread over
+   several lines is caught by reading the text as one line.
+2. **Refinement.** What is left becomes English lines: keep (reusing the catalog's own keep
+   wording), avoid, view preferences, written moods, product colours and quoted label text.
+   The rules cover the common phrasing, including every quick phrase the wizard offers.
+3. **AI, optional.** With `REFINER_PROVIDER=gemini`, `services/refiners/` asks a Gemini model
+   for the same structure. Its answer is validated and screened like seller text; an
+   instruction anywhere discards it. Any failure falls back to the rules, and the reason is
+   recorded in `refinement.fallbackReason`.
+
+The pipeline refines once per order, just before generation, and stores the result on the
+order as `refinement`. A rerun reuses it (a key over the inputs detects edited text), so a
+paid refiner is never called twice for the same words and a reviewer compares attempts built
+from the same brief. Unpaid orders never reach it. Screening is a filter, not a guarantee:
+whatever slips through is still quoted and labelled as data, and the fixed rules come last.
+
+`prompt.service.js` turns the brief and the refinement into the final image prompt: a pure
+function of the order and the catalog, layered as task, product (name, the category's own
+`prompt`, type), scene (the style's `prompt`, goal, mood, seller preferences), keep-unchanged,
+avoid, the seller's words (quoted, flattened to one line, labelled as data), reviewer feedback
+on a rerun, and the fixed rules last. Staff can read the result per style, with the
+refinement, at `GET /review/:orderId/prompts`. Nothing sends the prompt to an image model yet:
+that arrives with the first real image provider.
 
 ### Public vs. staff views of an order
 
 Anyone holding an order id or `FTN-` code can read the order, so the public response masks
-the seller's number and omits `lastError` (which can contain server paths). Staff routes
-under `/review` return the full record.
+the seller's number and omits `lastError` (which can contain server paths) and `refinement`
+(prompt text). What the seller needs from the refinement, which of their sentences were
+ignored and why, is in `briefSummary.ignored`. Staff routes under `/review` return the full
+record.
 
 ## Swap points
 
@@ -153,6 +188,7 @@ Each row is isolated to one file. Nothing outside it needs to change.
 | File storage | Local disk, static route | S3/GCS + signed URLs | `app.js`, `middleware/index.js` |
 | Job queue | In-process FIFO | BullMQ + Redis | `services/pipeline.service.js` |
 | Image model | `mock` compositor | Diffusion/editing API | `services/image.service.js` |
+| Seller text refiner | Built-in rules | Gemini (`REFINER_PROVIDER=gemini`), rules as fallback | `services/refiners/` |
 | Payments | Fake QRIS payload | Midtrans / Xendit | `services/payment.service.js` |
 | WhatsApp | Logged dry-run | Cloud API | `services/whatsapp.service.js` |
 | Reviewer auth | Shared bearer token | Accounts + roles | `middleware/index.js` |
@@ -166,6 +202,7 @@ Order {
   seller:  { name, whatsapp, storeName },
   product: { name, categoryId, notes },   // notes: the seller's own words (optional)
   brief:   { version, answers, usedText }, // tap answers as option ids; null on older orders
+  refinement,                  // notes screened + refined (rules or AI), stored at generation; staff-only
   packId, priceIdr,
   styleIds[], marketplaceIds[],
   photos[],                    // what the seller uploaded

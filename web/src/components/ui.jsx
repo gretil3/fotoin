@@ -41,6 +41,27 @@ export function Alert({ tone = 'info', children }) {
   return <div className={`alert alert--${tone}`}>{children}</div>;
 }
 
+/**
+ * The parts of a seller's own words that were left out of the prompt, each with
+ * the reason in Bahasa (briefSummary.ignored). Renders nothing when all of it
+ * was used, so a seller who wrote a normal note sees no warning.
+ */
+export function IgnoredNotes({ ignored, title }) {
+  if (!ignored?.length) return null;
+  return (
+    <Alert tone="warning">
+      <strong>{title}</strong>
+      <ul className="alert__list">
+        {ignored.map((item, index) => (
+          <li key={`${index}-${item.text}`}>
+            <span className="alert__quote">&ldquo;{item.text}&rdquo;</span> - {item.reason}
+          </li>
+        ))}
+      </ul>
+    </Alert>
+  );
+}
+
 export function Spinner({ ink = false }) {
   return <span className={`spinner${ink ? ' spinner--ink' : ''}`} aria-hidden="true" />;
 }

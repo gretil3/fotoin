@@ -44,6 +44,33 @@ export const fileSize = (bytes) => {
 export const briefAnswerText = (item) =>
   item.answers.length > 0 ? item.answers.join(', ') : 'Serahkan ke kami';
 
+/**
+ * How the seller's own words were read, for the reviewer console. `refinement`
+ * is staff-only and missing on orders that have not been through generation.
+ */
+export const refinementText = (refinement) => {
+  if (!refinement) return 'Belum diproses.';
+  if (refinement.source === 'ai') return `Dibaca AI (${refinement.provider}, ${refinement.model}).`;
+  return 'Dibaca dengan aturan bawaan.';
+};
+
+/** Why the AI reader was configured but not used (refinement.fallbackReason), in Bahasa. */
+export const FALLBACK_LABELS = {
+  'no-key': 'kunci API belum diisi',
+  'unknown-provider': 'penyedia AI tidak dikenal',
+  timeout: 'AI terlalu lama menjawab',
+  network: 'tidak bisa terhubung ke AI',
+  blocked: 'AI menolak isi cerita',
+  empty: 'AI tidak memberi jawaban',
+  'invalid-json': 'jawaban AI tidak terbaca',
+  'invalid-output': 'jawaban AI tidak sesuai format',
+  'flagged-output': 'jawaban AI berisi perintah, jadi dibuang',
+  'empty-output': 'jawaban AI kosong',
+};
+
+export const fallbackLabel = (code) =>
+  FALLBACK_LABELS[code] || (String(code).startsWith('http-') ? `AI menjawab error ${String(code).slice(5)}` : code);
+
 /** Maps an order status to the CSS modifier used by <StatusBadge />. */
 export const statusTone = (status) =>
   ({

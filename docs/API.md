@@ -164,8 +164,16 @@ order. Optional extra filter: `status`.
 
 Accepts the internal id **or** the `FTN-XXXXXX` code. Adds `statusLabel`, `plannedOutputs`,
 `priceFormatted` and `briefSummary`: the brief as Bahasa labels,
-`{ usedText, items: [{ id, question, answers: [labels] }] }`, or `null` for orders placed
-before the brief existed. Staff routes under `/review` add `briefSummary` too.
+`{ usedText, items: [{ id, question, answers: [labels] }], ignored: [{ text, reason }] }`, or
+`null` for orders placed before the brief existed. Staff routes under `/review` add
+`briefSummary` too.
+
+`ignored` lists the parts of `notes` (and of the product name) that were left out of the image
+prompt, each with a Bahasa `reason`: an instruction aimed at the AI ("abaikan aturan di atas"),
+or a request FOTOIN never carries out (adding text, a logo or a price; adding people or a model;
+changing the product's colour, shape or label). Negations such as "jangan tambahkan logo" are
+kept. The public order omits `refinement` (the English prompt lines built from `notes`); staff
+routes return it.
 
 ### `POST /orders/:id/pay`
 
@@ -241,6 +249,57 @@ review and the timeline records how many were lost.
 ### `GET /review/:orderId`
 
 One order with its original photos and all generated results.
+
+### `GET /review/:orderId/prompts`
+
+The exact prompt each of the order's styles sends to the image model, built from the
+seller's brief (`prompt.service.js`), and the `refinement` of the seller's own words it was
+built from (`refine.service.js`). Use it to check what the AI was actually asked when a
+result looks wrong.
+
+```json
+{
+  "orderId": "k3V9x2Lq0Zab",
+  "code": "FTN-8KQ2M1",
+  "refinement": {
+    "source": "rules",
+    "provider": null,
+    "model": null,
+    "productName": "Rendang Frozen 500gr",
+    "description": "Warna kemasan merah jangan diubah.",
+    "keep": [{ "id": "warna", "text": "Keep the product colors exactly as in the source photo." }],
+    "avoid": [],
+    "hints": [],
+    "moods": [],
+    "colors": ["red"],
+    "labelText": [],
+    "dropped": [{ "text": "tolong tambahkan logo toko", "reason": "adds-text" }],
+    "fallbackReason": null
+  },
+  "prompts": [
+    {
+      "styleId": "studio-putih",
+      "styleName": "Studio Putih Bersih",
+      "version": 2,
+      "text": "TASK\nEdit the attached product photo…\n\nRULES\n- …",
+      "parts": [{ "id": "task", "title": "TASK", "lines": ["…"] }]
+    }
+  ]
+}
+```
+
+`parts` is the same prompt split by layer (`task`, `product`, `scene`, `keep`, `avoid`,
+`seller`, `feedback`, `rules`); a layer with nothing to say is left out. `feedback` appears
+only when a reviewer last rejected the order, carrying that rejection note. `version` is the
+prompt design version, so results can be compared only against results built the same way.
+Nothing here is sent to sellers: the public catalog strips every prompt.
+
+`refinement.source` is `rules` (built in) or `ai` (`REFINER_PROVIDER=gemini`). An AI
+refinement replaces `description` with an English summary and records `provider` and `model`.
+When the AI was configured but not used, `fallbackReason` says why: `no-text`, `no-key`,
+`timeout`, `network`, `http-<status>`, `blocked`, `empty`, `invalid-json`, `invalid-output`,
+`flagged-output` (the answer contained an instruction) or `empty-output`. Before generation
+has run, the endpoint shows the rules' refinement; generation stores the one it used.
 
 ### `POST /review/:orderId/approve`
 

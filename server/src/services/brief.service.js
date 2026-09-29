@@ -9,6 +9,7 @@
  */
 import { BRIEF_QUESTIONS, BRIEF_VERSION, CATEGORIES, getBriefQuestions } from '../data/catalog.js';
 import { ApiError } from '../utils/api-error.js';
+import { DROP_REASONS, resolveRefinement } from './refine.service.js';
 
 const invalid = (message, code) => new ApiError(422, message, { code });
 
@@ -77,7 +78,15 @@ export const normalizeBrief = (categoryId, input, notes) => {
 /**
  * The seller's answers as Bahasa labels, for the order page and the reviewer
  * console. Returns null for orders placed before the brief existed.
- * @returns {{usedText: boolean, items: Array<{id: string, question: string, answers: string[]}>} | null}
+ *
+ * `ignored` lists the parts of the seller's own words that were left out of the
+ * prompt, each with the reason in Bahasa, so neither the seller nor the reviewer
+ * is surprised that "tambahkan logo toko" did not happen.
+ * @returns {{
+ *   usedText: boolean,
+ *   items: Array<{id: string, question: string, answers: string[]}>,
+ *   ignored: Array<{text: string, reason: string}>
+ * } | null}
  */
 export const describeBrief = (order) => {
   if (!order.brief) return null;
@@ -93,6 +102,10 @@ export const describeBrief = (order) => {
         answers: ids.map((id) => question.options.find((option) => option.id === id)?.label || id),
       };
     }),
+    ignored: resolveRefinement(order).dropped.map((item) => ({
+      text: item.text,
+      reason: DROP_REASONS[item.reason] || DROP_REASONS.instruction,
+    })),
   };
 };
 
@@ -100,10 +113,11 @@ const withoutPrompt = ({ prompt: _hidden, ...rest }) => rest;
 
 /**
  * Categories safe to send to the browser. Prompt fragments are how FOTOIN gets
- * its results; they stay on the server, for styles as well as product types.
+ * its results; they stay on the server, for the category itself as well as its
+ * product types and styles.
  */
 export const publicCategories = () =>
-  CATEGORIES.map((category) => ({
+  CATEGORIES.map(({ prompt: _hidden, ...category }) => ({
     ...category,
     productTypes: (category.productTypes || []).map(withoutPrompt),
     styles: category.styles.map(withoutPrompt),

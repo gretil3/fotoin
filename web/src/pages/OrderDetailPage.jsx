@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api from '../api/client.js';
 import { briefAnswerText, dateTime, relativeTime, rupiah } from '../lib/format.js';
-import { Alert, LoadingState, Spinner, StatusBadge } from '../components/ui.jsx';
+import { Alert, IgnoredNotes, LoadingState, Spinner, StatusBadge } from '../components/ui.jsx';
 import Icon from '../components/Icon.jsx';
 
 // Statuses that can change without the seller doing anything. Includes awaiting
@@ -263,6 +263,15 @@ export default function OrderDetailPage() {
             {order.product.notes && (
               <p className="small muted" style={{ marginTop: 12 }}>
                 Cerita tambahan: {order.product.notes}
+              </p>
+            )}
+            <IgnoredNotes
+              ignored={order.briefSummary?.ignored}
+              title="Sebagian ceritamu tidak kami pakai:"
+            />
+            {order.briefSummary?.ignored?.length > 0 && (
+              <p className="small muted" style={{ marginTop: -8 }}>
+                Sisa ceritamu tetap dipakai. Pilihan cepat di atas juga tetap berlaku.
               </p>
             )}
           </div>

@@ -6,6 +6,8 @@ import {
   CATEGORIES,
   MARKETPLACES,
   PACKS,
+  PROMPT_RULES,
+  PROMPT_TASK,
   getBriefQuestions,
   getPack,
   getStyle,
@@ -72,6 +74,39 @@ describe('catalog integrity', () => {
     assert.ok(getStyle('kuliner', 'meja-kayu'));
     assert.equal(getStyle('kosmetik', 'meja-kayu'), null);
     assert.equal(getStyle('tidak-ada', 'studio-putih'), null);
+  });
+});
+
+describe('image prompts', () => {
+  test('every category says what kind of product it is, in a hidden prompt', () => {
+    for (const category of CATEGORIES) {
+      assert.equal(typeof category.prompt, 'string', `${category.id} needs a prompt`);
+      assert.ok(category.prompt.length > 30, `${category.id} prompt is too thin to identify the product`);
+    }
+  });
+
+  test('every style describes its scene in a hidden prompt', () => {
+    for (const category of CATEGORIES) {
+      for (const style of category.styles) {
+        const where = `${category.id}/${style.id}`;
+        assert.equal(typeof style.prompt, 'string', `${where} needs a prompt`);
+        assert.ok(style.prompt.length > 40, `${where} prompt is too thin to steer a model`);
+      }
+    }
+  });
+
+  test('the default studio style always asks for a pure white background', () => {
+    // Marketplaces require it for the main photo: a tinted "white" gets a listing rejected.
+    for (const category of CATEGORIES) {
+      const style = category.styles.find((item) => item.default);
+      assert.match(style.prompt, /#FFFFFF/, `${category.id} default style must specify pure white`);
+    }
+  });
+
+  test('the fixed task and rules exist, and end by treating seller text as data', () => {
+    assert.ok(typeof PROMPT_TASK === 'string' && PROMPT_TASK.length > 40);
+    assert.ok(PROMPT_RULES.length >= 5 && PROMPT_RULES.every((rule) => rule.length > 20));
+    assert.match(PROMPT_RULES.at(-1), /seller description/i, 'the last rule guards against injection');
   });
 });
 

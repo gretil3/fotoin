@@ -14,6 +14,8 @@ import config from '../config/env.js';
 import { orders } from '../data/store.js';
 import { ORDER_STATUS, transition } from './order.service.js';
 import { generateForOrder, clearResults } from './image.service.js';
+import { hasCurrentRefinement } from './refine.service.js';
+import { refineOrder } from './refiners/index.js';
 import whatsapp from './whatsapp.service.js';
 
 const MAX_CONCURRENT = 2;
@@ -70,6 +72,13 @@ async function runJob({ orderId }) {
       order = transition(order, ORDER_STATUS.PROCESSING, { note: 'Generasi AI dimulai.' });
     }
     orders.update(order.id, { lastError: null, progress: null });
+
+    // The seller's own words are refined once per order and stored. A rerun
+    // reuses the result, so a paid refiner is never called twice for the same
+    // text, and a reviewer compares attempts built from the same brief.
+    if (!hasCurrentRefinement(order)) {
+      order = orders.update(order.id, { refinement: await refineOrder(order) });
+    }
 
     await clearResults(order.id);
 

@@ -934,6 +934,18 @@ button.result:hover {
   background: var(--warning-bg);
   color: var(--warning);
 }
+/* list of ignored sentences inside an alert (IgnoredNotes) */
+.alert__list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.alert__list li + li {
+  margin-top: 4px;
+}
+.alert__quote {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
 
 .progress {
   height: 8px;

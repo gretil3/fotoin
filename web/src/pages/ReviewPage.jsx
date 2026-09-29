@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import api from '../api/client.js';
-import { briefAnswerText, dateTime } from '../lib/format.js';
-import { Alert, EmptyState, LoadingState, Spinner, StatusBadge } from '../components/ui.jsx';
+import { briefAnswerText, dateTime, fallbackLabel, refinementText } from '../lib/format.js';
+import { Alert, EmptyState, IgnoredNotes, LoadingState, Spinner, StatusBadge } from '../components/ui.jsx';
 
 /**
  * Reviewer console - the human half of the hybrid model.
@@ -225,6 +225,19 @@ export default function ReviewPage() {
                         Penjual hanya memilih opsi cepat, tanpa cerita tambahan.
                       </div>
                     )}
+                    {active.briefSummary.usedText && (
+                      <div className="small muted" style={{ marginTop: 6 }}>
+                        {refinementText(active.refinement)}
+                        {active.refinement?.fallbackReason &&
+                          ` AI tidak dipakai: ${fallbackLabel(active.refinement.fallbackReason)}.`}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 10 }}>
+                      <IgnoredNotes
+                        ignored={active.briefSummary.ignored}
+                        title="Bagian cerita penjual yang tidak dipakai AI:"
+                      />
+                    </div>
                   </>
                 )}
 

@@ -11,6 +11,9 @@ import path from 'node:path';
 
 process.env.NODE_ENV = 'test';
 process.env.STORAGE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'fotoin-test-'));
+// Tests never call a paid or networked service, even when the developer's .env
+// switches the refiner to an AI provider (dotenv does not override this).
+process.env.REFINER_PROVIDER = 'rules';
 
 process.on('exit', () => {
   fs.rmSync(process.env.STORAGE_DIR, { recursive: true, force: true });

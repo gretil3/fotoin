@@ -196,6 +196,8 @@ All variables have working defaults — the app runs with no `.env` at all. Full
 | `PORT` | `4000` | API port |
 | `IMAGE_PROVIDER` | `mock` | `mock` needs no API key; see below to plug in a real model |
 | `MOCK_GENERATION_DELAY_MS` | `2500` | Simulated AI latency, so the UI progress state is visible |
+| `REFINER_PROVIDER` | `rules` | How the seller's own words are read: `rules` (built in, offline) or `gemini` (falls back to rules on any failure) |
+| `REFINER_API_KEY` | _(empty)_ | Google AI Studio key for `gemini`; reuses `IMAGE_PROVIDER_API_KEY` when both are the same vendor |
 | `REQUIRE_HUMAN_REVIEW` | `true` | **Keep this on.** It is the differentiator |
 | `REVIEWER_TOKEN` | `dev-reviewer-token` | Must match `VITE_REVIEWER_TOKEN` in the web app |
 | `WHATSAPP_ENABLED` | `false` | When off, messages are logged and stored, not sent |
