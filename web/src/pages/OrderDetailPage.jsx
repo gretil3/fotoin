@@ -228,16 +228,16 @@ export default function OrderDetailPage() {
                 <tr>
                   <th>Paket</th>
                   <td>
-                    {order.packId} - {order.priceFormatted}
+                    {order.packName} - {order.priceFormatted}
                   </td>
                 </tr>
                 <tr>
                   <th>Gaya</th>
-                  <td>{order.styleIds.join(', ')}</td>
+                  <td>{order.styleNames.join(', ')}</td>
                 </tr>
                 <tr>
                   <th>Kanal</th>
-                  <td>{order.marketplaceIds.join(', ')}</td>
+                  <td>{order.marketplaceNames.join(', ')}</td>
                 </tr>
                 <tr>
                   <th>Target</th>
@@ -281,7 +281,7 @@ export default function OrderDetailPage() {
             <ul className="timeline">
               {[...order.timeline].reverse().map((entry, index) => (
                 <li key={`${entry.status}-${index}`}>
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{entry.status}</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{entry.label}</div>
                   <div className="small muted">{dateTime(entry.at)}</div>
                   {entry.note && <div className="small">{entry.note}</div>}
                 </li>

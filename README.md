@@ -166,7 +166,7 @@ fotoin/
 │       ├── components/             Layout, UploadDropzone, shared UI
 │       ├── pages/
 │       │   ├── HomePage.jsx        Landing + pitch
-│       │   ├── CreateOrderPage.jsx ★ 5-step seller wizard (incl. the brief step)
+│       │   ├── CreateOrderPage.jsx ★ 3-step seller wizard (brief folded under "Atur sendiri")
 │       │   ├── OrderDetailPage.jsx Live status, QRIS, downloads
 │       │   ├── OrdersPage.jsx      Order list / lookup by phone
 │       │   ├── PricingPage.jsx     Packs + FAQ

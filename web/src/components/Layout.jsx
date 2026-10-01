@@ -5,6 +5,7 @@ import Icon from './Icon.jsx';
 // The reviewer console is an internal tool, so it lives in the footer, not the seller nav.
 const links = [
   { to: '/', label: 'Beranda', end: true },
+  { to: '/cara-kerja', label: 'Cara Kerja' },
   { to: '/pesanan', label: 'Pesanan Saya' },
   { to: '/harga', label: 'Harga' },
 ];

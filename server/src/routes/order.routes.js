@@ -17,6 +17,7 @@ import {
   transition,
 } from '../services/order.service.js';
 import { orders as orderStore, uploads as uploadStore } from '../data/store.js';
+import { getMarketplace, getPack, getStyle } from '../data/catalog.js';
 import { inspectImage } from '../services/image.service.js';
 import { describeBrief } from '../services/brief.service.js';
 import { confirmPayment } from '../services/checkout.service.js';
@@ -247,6 +248,10 @@ function decorate(order) {
     ...publicOrder,
     seller: { ...order.seller, whatsapp: maskWhatsapp(order.seller.whatsapp) },
     statusLabel: STATUS_LABELS[order.status] || order.status,
+    timeline: order.timeline.map((entry) => ({ ...entry, label: STATUS_LABELS[entry.status] || entry.status })),
+    packName: getPack(order.packId)?.name || order.packId,
+    styleNames: order.styleIds.map((id) => getStyle(order.product.categoryId, id)?.name || id),
+    marketplaceNames: order.marketplaceIds.map((id) => getMarketplace(id)?.name || id),
     briefSummary: describeBrief(order),
     plannedOutputs: plannedOutputCount(order),
     priceFormatted: `Rp${order.priceIdr.toLocaleString('id-ID')}`,

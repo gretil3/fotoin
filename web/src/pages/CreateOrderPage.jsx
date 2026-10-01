@@ -13,7 +13,10 @@ import {
   swatchStyle,
 } from '../components/ui.jsx';
 
-const STEPS = ['Foto Produk', 'Kategori & Gaya', 'Cerita Produk', 'Marketplace', 'Paket & Bayar'];
+// Three steps, one decision each. Everything with a sensible default (style,
+// brief, story) is folded away under "Atur sendiri", so a seller who is not
+// comfortable with forms can tap straight through.
+const STEPS = ['Foto', 'Jenis Produk', 'Bayar'];
 
 const NOTES_MAX = 500;
 
@@ -149,9 +152,7 @@ export default function CreateOrderPage() {
 
   const stepValid = [
     files.length > 0 && form.productName.trim().length >= 2,
-    Boolean(form.categoryId) && form.styleIds.length > 0,
-    true, // the brief is optional: every question has a default
-    form.marketplaceIds.length > 0,
+    Boolean(form.categoryId) && form.styleIds.length > 0 && form.marketplaceIds.length > 0,
     form.sellerName.trim().length >= 2 && form.whatsapp.replace(/\D/g, '').length >= 9,
   ][step];
 
@@ -190,9 +191,7 @@ export default function CreateOrderPage() {
     <div className="container" style={{ maxWidth: 860 }}>
       <h1>Buat Pesanan</h1>
       <p className="muted">
-        Lima langkah singkat. Kamu tidak perlu menulis prompt - cukup pilih opsi, dan ceritakan
-        produkmu kalau mau.
-      </p>
+Cukup 3 langkah. Tinggal foto, pilih, bayar.</p>
 
       <Stepper steps={STEPS} current={step} />
       {error && <Alert tone="error">{error}</Alert>}
@@ -200,11 +199,8 @@ export default function CreateOrderPage() {
       <div className="card">
         {step === 0 && (
           <>
-            <h3>1. Unggah foto produk</h3>
-            <p className="small muted">
-              Ambil dari HP apa adanya. Cukup 1-{catalog.limits.maxFiles} foto; makin jelas
-              produknya, makin bagus hasilnya.
-            </p>
+            <h3>1. Foto produkmu</h3>
+            <p className="small muted">Pakai foto dari HP, apa adanya.</p>
             <UploadDropzone
               files={files}
               onChange={setFiles}
@@ -226,9 +222,7 @@ export default function CreateOrderPage() {
 
         {step === 1 && (
           <>
-            <h3>2. Pilih kategori dan gaya foto</h3>
-            <p className="small muted">Kategori menentukan template gaya yang tersedia.</p>
-
+            <h3>2. Produkmu apa?</h3>
             <div className="grid grid-4" style={{ marginBottom: 24 }}>
               {catalog.categories.map((item) => (
                 <OptionTile
@@ -243,28 +237,103 @@ export default function CreateOrderPage() {
 
             {category && (
               <>
-                <Alert tone="info">Tips: {category.tips}</Alert>
-                <div className="row row-between" style={{ marginBottom: 10 }}>
-                  <strong>Gaya foto</strong>
-                  <span className="small muted">
-                    {form.styleIds.length}/{pack.maxStyles} dipilih ({pack.name})
-                  </span>
-                </div>
-                <div className="grid grid-3">
-                  {category.styles.map((style) => {
-                    const selected = form.styleIds.includes(style.id);
+                <h3>Mau jualan di mana?</h3>
+                <p className="small muted">
+                  Ukuran foto kami sesuaikan. Boleh pilih sampai {pack.maxMarketplaces}.
+                </p>
+                <div className="grid grid-2" style={{ marginBottom: 24 }}>
+                  {catalog.marketplaces.map((market) => {
+                    const selected = form.marketplaceIds.includes(market.id);
                     return (
                       <OptionTile
-                        key={style.id}
-                        name={style.name}
-                        description={style.description}
-                        swatch={swatchStyle(style.background)}
+                        key={market.id}
+                        name={market.name}
+                        swatch={{ background: market.color, height: 8 }}
                         selected={selected}
-                        disabled={!selected && form.styleIds.length >= pack.maxStyles}
-                        onClick={() => toggle('styleIds', style.id, pack.maxStyles)}
+                        disabled={!selected && form.marketplaceIds.length >= pack.maxMarketplaces}
+                        onClick={() => toggle('marketplaceIds', market.id, pack.maxMarketplaces)}
                       />
                     );
                   })}
+                </div>
+
+                <div className="faq">
+                  <details>
+                    <summary>Atur sendiri gaya &amp; detail foto (tidak wajib)</summary>
+                    <p className="small muted">
+                      Kalau dilewati, kami pilihkan yang paling cocok untuk produkmu.
+                    </p>
+
+                    <div className="row row-between" style={{ margin: '16px 0 10px' }}>
+                      <strong>Gaya foto</strong>
+                      <span className="small muted">
+                        {form.styleIds.length}/{pack.maxStyles} dipilih ({pack.name})
+                      </span>
+                    </div>
+                    <div className="grid grid-3" style={{ marginBottom: 24 }}>
+                      {category.styles.map((style) => {
+                        const selected = form.styleIds.includes(style.id);
+                        return (
+                          <OptionTile
+                            key={style.id}
+                            name={style.name}
+                            description={style.description}
+                            swatch={swatchStyle(style.background)}
+                            selected={selected}
+                            disabled={!selected && form.styleIds.length >= pack.maxStyles}
+                            onClick={() => toggle('styleIds', style.id, pack.maxStyles)}
+                          />
+                        );
+                      })}
+                    </div>
+
+                    {briefQuestions.map((question) => (
+                      <div className="brief-question" key={question.id}>
+                        <div className="brief-question__label">
+                          <span>{question.label}</span>
+                          <span className="small muted" style={{ fontWeight: 400 }}>
+                            {questionHint(question)}
+                          </span>
+                        </div>
+                        <ChoiceChips
+                          label={question.label}
+                          options={question.options || []}
+                          multi={question.type === 'multi'}
+                          max={question.max}
+                          value={form.briefAnswers[question.id]}
+                          onChange={(value) => answer(question.id, value)}
+                        />
+                      </div>
+                    ))}
+
+                    <div className="field" style={{ marginBottom: 10 }}>
+                      <label htmlFor="notes">Ada pesan untuk kami?</label>
+                      <textarea
+                        id="notes"
+                        className="textarea"
+                        maxLength={NOTES_MAX}
+                        placeholder='Contoh: Warna kemasan merah jangan diubah, tulisan "Halal" harus terbaca.'
+                        value={form.notes}
+                        onChange={(event) => set({ notes: event.target.value })}
+                      />
+                      <div className="char-count">
+                        {form.notes.length}/{NOTES_MAX}
+                      </div>
+                    </div>
+                    <div className="choices" role="group" aria-label="Kalimat cepat untuk pesan">
+                      {STORY_PHRASES.map((phrase) => (
+                        <button
+                          key={phrase}
+                          type="button"
+                          className="choice choice--add"
+                          aria-pressed={form.notes.includes(phrase)}
+                          onClick={() => togglePhrase(phrase)}
+                        >
+                          {form.notes.includes(phrase) ? '✓' : '+'} {phrase}
+                        </button>
+                      ))}
+                    </div>
+                  </details>
                 </div>
               </>
             )}
@@ -273,115 +342,13 @@ export default function CreateOrderPage() {
 
         {step === 2 && (
           <>
-            <h3>3. Ceritakan produkmu</h3>
-            <Alert tone="info">
-              <strong>Dua cara, dua-duanya oke.</strong> Pilih opsi cepat di bawah saja sudah cukup.
-              Kalau mau hasil lebih pas, tambahkan cerita singkat di kotak paling bawah. Makin
-              lengkap ceritamu, makin mudah kami menyesuaikannya.
-            </Alert>
-
-            {briefQuestions.map((question) => (
-              <div className="brief-question" key={question.id}>
-                <div className="brief-question__label">
-                  <span>{question.label}</span>
-                  <span className="small muted" style={{ fontWeight: 400 }}>
-                    {questionHint(question)}
-                  </span>
-                </div>
-                <ChoiceChips
-                  label={question.label}
-                  options={question.options || []}
-                  multi={question.type === 'multi'}
-                  max={question.max}
-                  value={form.briefAnswers[question.id]}
-                  onChange={(value) => answer(question.id, value)}
-                />
-              </div>
-            ))}
-
-            <hr className="brief-divider" />
-
-            <div className="field" style={{ marginBottom: 10 }}>
-              <label htmlFor="notes">Mau cerita lebih lengkap? (opsional, disarankan)</label>
-              <textarea
-                id="notes"
-                className="textarea"
-                maxLength={NOTES_MAX}
-                placeholder='Contoh: Rendang frozen 500gr untuk Shopee. Warna kemasan merah jangan diubah, tulisan "Halal" harus terbaca. Mau kesan hangat seperti masakan rumah.'
-                value={form.notes}
-                onChange={(event) => set({ notes: event.target.value })}
-              />
-              <div className="char-count">
-                {form.notes.length}/{NOTES_MAX}
-              </div>
-            </div>
-
-            <div className="small muted" style={{ marginBottom: 8 }}>
-              Bingung mulai dari mana? Ketuk untuk menambahkan:
-            </div>
-            <div className="choices" role="group" aria-label="Kalimat cepat untuk cerita produk">
-              {STORY_PHRASES.map((phrase) => (
-                <button
-                  key={phrase}
-                  type="button"
-                  className="choice choice--add"
-                  aria-pressed={form.notes.includes(phrase)}
-                  onClick={() => togglePhrase(phrase)}
-                >
-                  {form.notes.includes(phrase) ? '✓' : '+'} {phrase}
-                </button>
-              ))}
-            </div>
-
-            <p className="hint" style={{ marginTop: 18, marginBottom: 0 }}>
-              Kami berusaha menjaga bentuk, warna, dan tulisan di kemasan produkmu tetap sama, dan
-              reviewer memeriksanya sebelum dikirim.
-            </p>
-          </>
-        )}
-
-        {step === 3 && (
-          <>
-            <h3>4. Mau dipakai di mana?</h3>
-            <p className="small muted">
-              Kami potong otomatis ke ukuran resmi tiap kanal, jadi kamu tinggal unggah.
-            </p>
-            <div className="row row-between" style={{ marginBottom: 10 }}>
-              <strong>Marketplace tujuan</strong>
-              <span className="small muted">
-                {form.marketplaceIds.length}/{pack.maxMarketplaces} dipilih
-              </span>
-            </div>
-            <div className="grid grid-2">
-              {catalog.marketplaces.map((market) => {
-                const selected = form.marketplaceIds.includes(market.id);
-                return (
-                  <OptionTile
-                    key={market.id}
-                    name={market.name}
-                    description={market.notes}
-                    meta={market.outputs.map((out) => `${out.width}x${out.height}`).join('  -  ')}
-                    swatch={{ background: market.color, height: 8 }}
-                    selected={selected}
-                    disabled={!selected && form.marketplaceIds.length >= pack.maxMarketplaces}
-                    onClick={() => toggle('marketplaceIds', market.id, pack.maxMarketplaces)}
-                  />
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {step === 4 && (
-          <>
-            <h3>5. Pilih paket dan data pengiriman</h3>
+            <h3>3. Pilih paket</h3>
             <div className="grid grid-3" style={{ marginBottom: 24 }}>
               {catalog.packs.map((item) => (
                 <OptionTile
                   key={item.id}
                   name={`${item.name}${item.popular ? ' - Terlaris' : ''}`}
                   description={`${rupiah(item.priceIdr)} - ${item.photoCount} foto, selesai ~${item.turnaroundHours} jam`}
-                  meta={item.highlights.join(' - ')}
                   selected={form.packId === item.id}
                   onClick={() => pickPack(item.id)}
                 />
@@ -409,45 +376,15 @@ export default function CreateOrderPage() {
                   value={form.whatsapp}
                   onChange={(event) => set({ whatsapp: event.target.value })}
                 />
-                <div className="hint">Hasil foto dikirim ke nomor ini.</div>
+                <div className="hint">Foto jadi dikirim ke WhatsApp ini.</div>
               </div>
-            </div>
-
-            <div className="field">
-              <label htmlFor="storeName">Nama toko (opsional)</label>
-              <input
-                id="storeName"
-                className="input"
-                placeholder="Contoh: Dapur Sari"
-                value={form.storeName}
-                onChange={(event) => set({ storeName: event.target.value })}
-              />
-            </div>
-
-            <div className="field">
-              <label htmlFor="payment">Metode pembayaran</label>
-              <select
-                id="payment"
-                className="select"
-                value={form.paymentMethodId}
-                onChange={(event) => set({ paymentMethodId: event.target.value })}
-              >
-                {catalog.paymentMethods.map((method) => (
-                  <option key={method.id} value={method.id}>
-                    {method.name} - {method.description}
-                  </option>
-                ))}
-              </select>
             </div>
 
             <div className="summary">
               <div className="row row-between">
                 <div>
-                  <strong>Paket {pack.name}</strong>
-                  <div className="small muted">
-                    {files.length} foto dikirim &middot; {form.styleIds.length} gaya &middot;{' '}
-                    {form.marketplaceIds.length} marketplace
-                  </div>
+                  <strong>{pack.name}</strong>
+                  <div className="small muted">Bayar pakai QRIS: bisa dari bank atau e-wallet apa pun.</div>
                 </div>
                 <div className="summary__price">{rupiah(pack.priceIdr)}</div>
               </div>

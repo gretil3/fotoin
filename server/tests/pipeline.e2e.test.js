@@ -253,6 +253,9 @@ test('full order journey: upload, pay, generate, review, deliver', async (t) => 
   assert.equal(order.status, 'menunggu_pembayaran');
   assert.ok(order.payment.qrPayload, 'a QRIS payload should be issued');
   assert.equal(order.seller.whatsapp, '62812*****890', 'public responses mask the number');
+  assert.ok(order.packName.startsWith('Paket '), 'the seller sees names, not catalog ids');
+  assert.equal(order.styleNames.length, order.styleIds.length);
+  assert.ok(order.timeline.every((entry) => entry.label && entry.label !== entry.status));
 
   // 2. Pay -> the pipeline picks the order up, and the turnaround clock restarts.
   const paid = await json(`/api/v1/orders/${order.id}/pay`, { method: 'POST' });

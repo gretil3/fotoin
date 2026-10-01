@@ -1,56 +1,41 @@
 import { Link } from 'react-router-dom';
 import Icon from '../components/Icon.jsx';
 
+// One message, one button. The longer explanation lives on /cara-kerja, so a
+// seller who just wants to order is never asked to read first.
+
 const steps = [
-  {
-    title: 'Jepret',
-    body: 'Foto produk pakai HP apa adanya. Tidak perlu lightbox, tripod, atau studio.',
-  },
-  {
-    title: 'Kirim',
-    body: 'Upload lewat WhatsApp atau web FOTOIN, lalu pilih kategori produk kamu.',
-  },
-  {
-    title: 'AI Proses',
-    body: 'AI membuat variasi latar studio, lifestyle, dan flat-lay - tanpa kamu menulis prompt.',
-  },
-  {
-    title: 'Dicek & Dikirim',
-    body: 'Reviewer manusia memeriksa hasilnya, lalu mengirim ukuran siap unggah ke WhatsApp kamu.',
-  },
+  { icon: 'camera', title: 'Foto pakai HP', body: 'Apa adanya. Di meja dapur juga boleh.' },
+  { icon: 'check', title: 'Pilih jenis produk', body: 'Tinggal ketuk, tidak perlu mengetik.' },
+  { icon: 'chat', title: 'Terima di WhatsApp', body: 'Foto rapi, sudah dicek tim kami.' },
 ];
 
-const differentiators = [
-  {
-    icon: 'shield',
-    title: 'Jasa, bukan sekadar tools',
-    body: 'Kamu tidak perlu belajar prompt atau edit. AI yang bekerja, tim kami yang memastikan hasilnya benar sebelum dikirim.',
-  },
-  {
-    icon: 'store',
-    title: 'Dibuat untuk pasar Indonesia',
-    body: 'Antarmuka Bahasa Indonesia dengan template khusus kuliner, fashion muslim, kerajinan, dan kosmetik lokal.',
-  },
-  {
-    icon: 'image',
-    title: 'Langsung siap unggah',
-    body: 'Otomatis dipotong ke ukuran resmi Shopee, Tokopedia, dan TikTok Shop. Tinggal upload, tidak perlu resize manual.',
-  },
-  {
-    icon: 'chat',
-    title: 'Lewat WhatsApp, bayar QRIS',
-    body: 'Pesan dari aplikasi yang sudah kamu pakai tiap hari. Bayar per paket Rp15.000-Rp25.000, tanpa langganan.',
-  },
+const channels = [
+  { name: 'Shopee', color: '#ee4d2d' },
+  { name: 'Tokopedia', color: '#42b549' },
+  { name: 'TikTok Shop', color: '#111111' },
+  { name: 'Instagram', color: '#c13584' },
 ];
 
-const verticals = [
-  { name: 'Kuliner', body: 'Frozen food, katering rumahan, snack kemasan, minuman.' },
-  { name: 'Fashion & Hijab', body: 'Hijab, gamis, koko, mukena, brand modest kecil.' },
-  { name: 'Kerajinan & Dekor', body: 'Anyaman, keramik, lilin, dekorasi rumah handmade.' },
-  { name: 'Skincare & Kosmetik', body: 'Skincare lokal, body care, parfum, kosmetik brand sendiri.' },
-];
-
-const channels = ['Shopee', 'Tokopedia', 'TikTok Shop', 'Instagram'];
+// The same jar in both frames: the point of the picture is that the product
+// itself does not change, only what is around it.
+function ProductJar() {
+  return (
+    <svg className="jar" viewBox="0 0 120 160" aria-hidden="true">
+      <rect x="22" y="8" width="76" height="26" rx="6" fill="#8f1d14" />
+      <rect x="22" y="26" width="76" height="6" fill="#6f150e" />
+      <path d="M16 44a10 10 0 0110-10h68a10 10 0 0110 10v96a14 14 0 01-14 14H30a14 14 0 01-14-14V44z" fill="#c8321f" />
+      <path d="M24 44h8v100h-2a6 6 0 01-6-6V44z" fill="#ffffff" opacity="0.18" />
+      <rect x="16" y="70" width="88" height="54" fill="#fff4e0" />
+      <text x="60" y="95" textAnchor="middle" fontFamily="Sora, sans-serif" fontWeight="700" fontSize="15" fill="#8f1d14">
+        SAMBAL
+      </text>
+      <text x="60" y="113" textAnchor="middle" fontFamily="Manrope, sans-serif" fontWeight="600" fontSize="10" fill="#6b4a2b">
+        Bu Sari · Pedas
+      </text>
+    </svg>
+  );
+}
 
 export default function HomePage() {
   return (
@@ -58,128 +43,98 @@ export default function HomePage() {
       <section className="hero">
         <div className="container hero__grid">
           <div>
-            <span className="badge badge--brand">Dibantu AI &middot; Dicek manusia</span>
-            <h1>Foto produk siap jualan, dari HP kamu.</h1>
-            <p className="hero__lead">
-              Kirim foto seadanya, kami olah jadi foto katalog yang rapi dan siap unggah ke
-              marketplace. Hasilnya dicek manusia dulu, jadi tidak pernah aneh.
-            </p>
-            <div className="row" style={{ marginTop: 26 }}>
-              <Link to="/buat" className="btn btn--primary btn--lg">
-                Buat Pesanan Sekarang
-                <Icon name="arrowRight" size={18} />
-              </Link>
-              <Link to="/harga" className="btn btn--ghost btn--lg">
-                Lihat Harga
-              </Link>
-            </div>
-            <div className="stats">
-              <div>
-                <strong>Rp15rb</strong>
-                <span className="small muted">mulai per paket</span>
-              </div>
-              <div>
-                <strong>1-6 jam</strong>
-                <span className="small muted">waktu pengerjaan</span>
-              </div>
-              <div>
-                <strong>4 kanal</strong>
-                <span className="small muted">siap unggah</span>
-              </div>
-            </div>
+            <span className="hero__badge">
+              <Icon name="sparkle" size={14} /> Dibantu AI &middot; Dicek manusia
+            </span>
+            <h1>
+              Foto produk <em>siap jualan</em>, dari HP kamu.
+            </h1>
+            <p className="hero__lead">Kirim foto seadanya. Kami ubah jadi foto bagus untuk jualan.</p>
+            <Link to="/buat" className="btn btn--light btn--xl">
+              Mulai Sekarang
+              <Icon name="arrowRight" size={20} />
+            </Link>
+            <ul className="hero__trust">
+              <li>
+                <Icon name="check" size={16} /> Mulai Rp15.000
+              </li>
+              <li>
+                <Icon name="check" size={16} /> Tanpa langganan
+              </li>
+              <li>
+                <Icon name="check" size={16} /> Hasil di WhatsApp
+              </li>
+            </ul>
           </div>
 
-          <div>
-            <div className="compare" aria-hidden="true">
-              <figure>
-                <div className="compare__frame compare__before">
-                  <Icon name="camera" size={40} strokeWidth={1.4} />
-                </div>
-                <figcaption>Sebelum: foto meja dapur</figcaption>
-              </figure>
-              <figure>
-                <div className="compare__frame compare__after">
-                  <Icon name="sparkle" size={40} strokeWidth={1.4} />
-                </div>
-                <figcaption>Sesudah: siap unggah 1:1</figcaption>
-              </figure>
-            </div>
-            <div className="chips">
-              {channels.map((channel) => (
-                <span className="chip" key={channel}>
-                  {channel}
-                </span>
-              ))}
-            </div>
+          <div className="showcase" aria-hidden="true">
+            <figure className="showcase__card showcase__before">
+              <div className="showcase__scene">
+                <span className="clutter clutter--cup" />
+                <span className="clutter clutter--cloth" />
+                <ProductJar />
+              </div>
+              <figcaption>Sebelum</figcaption>
+            </figure>
+            <span className="showcase__magic">
+              <Icon name="sparkle" size={22} />
+            </span>
+            <figure className="showcase__card showcase__after">
+              <div className="showcase__scene">
+                <span className="showcase__shadow" />
+                <ProductJar />
+                <span className="showcase__tag">1:1 &middot; Shopee</span>
+              </div>
+              <figcaption>Sesudah</figcaption>
+              <span className="showcase__ok">
+                <Icon name="check" size={14} strokeWidth={2.4} /> Dicek manusia
+              </span>
+            </figure>
           </div>
         </div>
       </section>
 
-      <div className="container page">
-        <section className="section">
-          <div className="section-head">
-            <span className="eyebrow">Cara kerja</span>
-            <h2>Empat langkah, tanpa keahlian desain</h2>
-          </div>
-          <div className="grid grid-4">
+      <div className="container">
+        <section className="section home-steps">
+          <h2 className="center">Semudah 1, 2, 3</h2>
+          <ol className="steps3">
             {steps.map((step, index) => (
-              <div className="card" key={step.title}>
-                <div className="step-num">{index + 1}</div>
-                <h3>{step.title}</h3>
-                <p className="small muted" style={{ margin: 0 }}>
-                  {step.body}
-                </p>
-              </div>
+              <li key={step.title}>
+                <span className="steps3__icon">
+                  <Icon name={step.icon} size={30} strokeWidth={1.6} />
+                  <span className="steps3__num">{index + 1}</span>
+                </span>
+                <strong>{step.title}</strong>
+                <span className="muted">{step.body}</span>
+              </li>
             ))}
-          </div>
+          </ol>
         </section>
 
-        <section className="section">
-          <div className="section-head">
-            <span className="eyebrow">Kenapa FOTOIN</span>
-            <h2>Bukan tools AI biasa</h2>
-          </div>
-          <div className="grid grid-2">
-            {differentiators.map((item) => (
-              <div className="card" key={item.title}>
-                <div className="feature__icon">
-                  <Icon name={item.icon} />
-                </div>
-                <div className="card__title">{item.title}</div>
-                <p className="small muted" style={{ margin: 0 }}>
-                  {item.body}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="section">
-          <div className="section-head">
-            <span className="eyebrow">Kategori</span>
-            <h2>Dibuat untuk empat jenis usaha</h2>
-          </div>
-          <div className="grid grid-4">
-            {verticals.map((vertical) => (
-              <div className="card card--flat" key={vertical.name}>
-                <div className="card__title">{vertical.name}</div>
-                <p className="small muted" style={{ margin: 0 }}>
-                  {vertical.body}
-                </p>
-              </div>
+        <section className="section channels">
+          <span className="muted">Ukurannya langsung pas untuk</span>
+          <div className="channels__list">
+            {channels.map((channel) => (
+              <span key={channel.name} className="channels__item">
+                <span className="channels__dot" style={{ background: channel.color }} />
+                {channel.name}
+              </span>
             ))}
           </div>
         </section>
 
         <section className="cta-band">
-          <h2>Siap coba dengan satu produk dulu?</h2>
-          <p>
-            Tidak ada langganan dan tidak ada kontrak. Bayar satu paket, lihat hasilnya, baru
-            lanjutkan kalau cocok.
-          </p>
-          <Link to="/buat" className="btn btn--primary btn--lg">
-            Buat Pesanan Pertama
+          <h2>Coba satu produk dulu.</h2>
+          <p>Bayar sekali, mulai Rp15.000. Tidak cocok? Tidak perlu lanjut.</p>
+          <Link to="/buat" className="btn btn--light btn--xl">
+            Mulai Sekarang
+            <Icon name="arrowRight" size={20} />
           </Link>
+          <p className="small" style={{ marginTop: 18, marginBottom: 0 }}>
+            <Link to="/cara-kerja" className="cta-band__link">
+              Mau tahu lebih lanjut? Lihat cara kerjanya
+            </Link>
+          </p>
         </section>
       </div>
     </>
