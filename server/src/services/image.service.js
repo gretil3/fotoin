@@ -22,6 +22,7 @@ import { nanoid } from 'nanoid';
 import config from '../config/env.js';
 import { getMarketplace, getStyle } from '../data/catalog.js';
 import { planOutputs } from './order.service.js';
+import { getProvider } from './providers/index.js';
 
 let sharp = null;
 let sharpChecked = false;
@@ -80,6 +81,31 @@ const shadowSvg = (width, height) => `<svg xmlns="http://www.w3.org/2000/svg" wi
  */
 const renderOutput = async ({ sourcePath, style, width, height, targetPath }) => {
   const lib = await loadSharp();
+  
+  // Try real AI provider first
+  const provider = await getProvider();
+  if (provider && provider.generateImage) {
+    const tempPath = `${targetPath}.tmp.jpg`;
+    await provider.generateImage({ sourcePath, style, targetPath: tempPath, width, height });
+    
+    if (!lib) {
+      await fs.rename(tempPath, targetPath);
+      const stat = await fs.stat(targetPath);
+      return { width, height, bytes: stat.size, degraded: true };
+    }
+    
+    // Fit the generated image into the marketplace exact dimensions
+    await lib(tempPath)
+      .resize(width, height, { fit: 'contain', background: '#ffffff' })
+      .jpeg({ quality: 88, chromaSubsampling: '4:4:4', mozjpeg: true })
+      .toFile(targetPath);
+      
+    await fs.unlink(tempPath).catch(() => {});
+    const stat = await fs.stat(targetPath);
+    return { width, height, bytes: stat.size, degraded: false };
+  }
+
+  // Mock fallback: copy if no sharp, or render SVG composite
   if (!lib) {
     await fs.copyFile(sourcePath, targetPath);
     const stat = await fs.stat(targetPath);
