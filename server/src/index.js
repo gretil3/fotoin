@@ -2,8 +2,19 @@ import config from './config/env.js';
 import { createApp } from './app.js';
 import { flush } from './data/store.js';
 import { recoverInterruptedJobs } from './services/pipeline.service.js';
+import { PROVIDERS } from './services/providers/index.js';
 
 const app = createApp();
+
+/** "gemini (gemini-3.1-flash-image)", with a warning a misconfigured demo would otherwise hide until the first order. */
+const describeImageProvider = () => {
+  const { provider: name, model, apiKey } = config.generation;
+  if (name === 'mock') return 'mock (local compositor, no AI)';
+  const provider = PROVIDERS[name];
+  if (!provider) return `${name}  !! unknown, every order will fail (use mock or gemini)`;
+  const label = `${name} (${model || provider.defaultModel})`;
+  return apiKey ? label : `${label}  !! IMAGE_PROVIDER_API_KEY is empty, every order will fail`;
+};
 
 const server = app.listen(config.port, () => {
   console.log('');
@@ -12,7 +23,7 @@ const server = app.listen(config.port, () => {
   console.log(`  URL           http://localhost:${config.port}`);
   console.log(`  Health        http://localhost:${config.port}/api/v1/health`);
   console.log(`  Env           ${config.env}`);
-  console.log(`  AI provider   ${config.generation.provider}`);
+  console.log(`  AI provider   ${describeImageProvider()}`);
   console.log(`  Human review  ${config.review.required ? 'ON (required)' : 'OFF (auto-deliver)'}`);
   console.log(`  WhatsApp      ${config.whatsapp.enabled ? 'live' : 'dry-run (logged only)'}`);
   console.log(`  Payments      ${config.payment.provider}`);

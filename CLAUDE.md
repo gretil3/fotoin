@@ -26,5 +26,6 @@ Deeper context: `docs/CLAUDE_CODE_PROMPT.md` (current state, rules, task list), 
 Upload → order (brief + seller notes screened by `refine.service.js`, optional Gemini refiner in
 `services/refiners/`) → pay (mock) → `pipeline.service.js` queue → `image.service.js` generate +
 exact marketplace sizing → reviewer approves/rejects (`review.service.js`) → WhatsApp (dry-run).
-`prompt.service.js` builds the per-style image prompt (pure function); it is shown to reviewers but
-the `mock` image provider ignores it. A real image provider is the biggest open gap.
+`prompt.service.js` builds the per-style image prompt (pure function); it is shown to reviewers.
+`IMAGE_PROVIDER=gemini` (`services/providers/`) sends it with the photo, one call per style, and
+logs each call on the order as staff-only `generations`; the default `mock` ignores it.

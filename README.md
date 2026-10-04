@@ -194,7 +194,10 @@ All variables have working defaults — the app runs with no `.env` at all. Full
 | Variable | Default | Notes |
 |---|---|---|
 | `PORT` | `4000` | API port |
-| `IMAGE_PROVIDER` | `mock` | `mock` needs no API key; see below to plug in a real model |
+| `IMAGE_PROVIDER` | `mock` | `mock` (offline, no key) or `gemini` (real image model); see below |
+| `IMAGE_PROVIDER_API_KEY` | _(empty)_ | Google AI Studio key with **billing enabled** (image models have no free tier) |
+| `IMAGE_PROVIDER_MODEL` | _(empty)_ | Defaults to `gemini-3.1-flash-image` (~US$0.067 per image) |
+| `IMAGE_MAX_CALLS_PER_ORDER` | `5` | Spend guard: max paid image calls per generation run |
 | `MOCK_GENERATION_DELAY_MS` | `2500` | Simulated AI latency, so the UI progress state is visible |
 | `REFINER_PROVIDER` | `rules` | How the seller's own words are read: `rules` (built in, offline) or `gemini` (falls back to rules on any failure) |
 | `REFINER_API_KEY` | _(empty)_ | Google AI Studio key for `gemini`; reuses `IMAGE_PROVIDER_API_KEY` when both are the same vendor |
@@ -207,20 +210,24 @@ All variables have working defaults — the app runs with no `.env` at all. Full
 | `STORAGE_DIR` | `server/storage` | Where uploads, results and `db.json` live (tests point this at a temp dir) |
 | `WEB_URL` | `http://localhost:5173` | Base of the download link sent in the WhatsApp delivery message |
 
-### Plugging in a real image model
+### Turning on real AI images (Gemini)
 
-`server/src/services/image.service.js` is the only file that talks to a generator. Implement
-one function with this contract and point `IMAGE_PROVIDER` at it:
+1. Create a key at <https://aistudio.google.com/apikey> in a Google Cloud project with
+   billing enabled.
+2. In `server/.env`: `IMAGE_PROVIDER=gemini` and `IMAGE_PROVIDER_API_KEY=<your key>`.
+   Optionally `REFINER_PROVIDER=gemini` too; it reuses the same key.
+3. Restart `npm run dev`. The startup banner shows `AI provider gemini (<model>)`, or a
+   warning if the key is missing.
 
-```js
-async function generate({ sourcePath, style, order }) {
-  // style.background and style.description carry the preset;
-  // return a Buffer or a file path of the styled image.
-}
-```
+Each style in an order is **one** image call: the seller's photo plus the layered prompt
+from `prompt.service.js` (with the reviewer's note on a rerun). Every marketplace size of
+that style is then rendered from the one result by `image.service.js`: 1:1 sizes are scaled,
+3:4 and 9:16 keep the whole scene and extend its edges with a blur, so nothing is cropped. Each
+call is logged on the order as `generations` (model, cost estimate, exact prompt; staff-only).
 
-The marketplace resizing step downstream is provider-agnostic, so exact output dimensions
-keep working regardless of which model produces the image.
+Another vendor plugs in as one module in `server/src/services/providers/` exporting
+`{ id, defaultModel, costUsd(model), generate({ prompt, image, apiKey, model, timeoutMs }) }`
+that returns `{ data: Buffer, mimeType }` and throws errors with a short `code`.
 
 ---
 
@@ -261,8 +268,9 @@ This is a pilot-grade codebase. Before real sellers touch it:
 - [ ] Real seller authentication (WhatsApp OTP), and real reviewer accounts with roles. Until
       then `GET /orders` needs a phone number and returns masked numbers, and the reviewer
       token is a `VITE_` variable that ships inside the public JS bundle: it is not a secret
-- [ ] Real image generation: the `mock` provider pastes the original photo, background
-      included, onto the style backdrop. It is a pipeline test double, not a product
+- [ ] Judge real image quality: `IMAGE_PROVIDER=gemini` is wired in, but label fidelity on
+      messy phone photos has not been measured yet. The `mock` provider still pastes the
+      original photo, background included; it is a pipeline test double, not a product
 - [ ] Drive payment settlement **only** from the provider webhook (the `/pay` shortcut already
       answers 404 once `PAYMENT_PROVIDER` is not `mock`; the mock webhook still accepts anything)
 - [ ] Verify the WhatsApp webhook signature (`X-Hub-Signature-256`)
