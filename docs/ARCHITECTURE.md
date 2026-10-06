@@ -145,7 +145,10 @@ each category's `productTypes` in `catalog.js`) and may add their own words in
 fragment for the image model. `brief.service.js` validates answers against those option ids,
 so the only prompt text a tap can produce is text we wrote. The free text is kept apart and
 must be treated as a description, never as instructions. Prompt fragments are stripped from
-every public catalog response.
+every public catalog response. One question, `angle` ("Dari depan" / "Dari atas"), is asked on
+the upload step next to the shooting tips instead of with the others, because it also decides
+the shadow in `image.service.js`: a contact shadow sized to the product's base for a standing
+product, a soft all-around silhouette shadow for a flat lay.
 
 The brief is stored as `{ version, answers, usedText }`. `usedText` (did the seller write their
 own words?) is derived server-side so the pilot can compare rejection rates and QA time

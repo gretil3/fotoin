@@ -380,6 +380,18 @@ export const BRIEF_QUESTIONS = [
     default: null,
   },
   {
+    // How the photo was taken. Asked on the upload step, next to the shooting tips,
+    // because it decides the shadow: a product standing on a floor vs. lying flat.
+    id: 'angle',
+    label: 'Foto diambil dari mana?',
+    type: 'single',
+    default: 'depan',
+    options: [
+      { id: 'depan', label: 'Dari depan', prompt: 'Photographed from the front at product height; the product stands on a surface.' },
+      { id: 'atas', label: 'Dari atas', prompt: 'Photographed from directly above (flat lay); the product lies flat on a surface.' },
+    ],
+  },
+  {
     id: 'goal',
     label: 'Foto ini untuk apa?',
     type: 'single',

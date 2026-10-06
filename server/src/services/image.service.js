@@ -72,24 +72,87 @@ const backgroundSvg = (style, width, height) => {
   </svg>`;
 };
 
-/** Elliptical contact shadow under the product, so it does not look pasted. */
-const shadowSvg = (width, height) => `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-  <defs>
-    <radialGradient id="s" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#000000" stop-opacity="0.30"/>
-      <stop offset="70%" stop-color="#000000" stop-opacity="0.10"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-  <ellipse cx="${width / 2}" cy="${height / 2}" rx="${width / 2}" ry="${height / 2}" fill="url(#s)"/>
-</svg>`;
+// Shadow look, matched by eye to the Python pipeline (pipeline/fotoin/composite.py).
+const CONTACT_OPACITY = 0.55; // tight dark line where a standing product meets the floor
+const AMBIENT_OPACITY = 0.3; // wide soft pool around the base
+const FLATLAY_OPACITY = 0.28; // whole silhouette, for a product photographed from above
+const FLATLAY_OFFSET = 0.012; // fraction of canvas height, downward
+const FLATLAY_BLUR = 0.012; // gaussian sigma, fraction of the short side
+
+/**
+ * Where a standing product touches the floor: the horizontal extent of the
+ * bottom 4% of its silhouette. A tapered cup's base is narrower than its
+ * bounding box, and a shadow sized to the box makes it look like it floats.
+ */
+const baseOf = async (lib, png) => {
+  const { data, info } = await lib(png).extractChannel(3).raw().toBuffer({ resolveWithObject: true });
+  const { width, height } = info;
+  const solid = (x, y) => data[y * width + x] > 127;
+  const rowHas = (y) => {
+    for (let x = 0; x < width; x += 1) if (solid(x, y)) return true;
+    return false;
+  };
+  let bottom = height - 1;
+  while (bottom > 0 && !rowHas(bottom)) bottom -= 1;
+  let top = 0;
+  while (top < bottom && !rowHas(top)) top += 1;
+  let minX = width;
+  let maxX = 0;
+  for (let y = bottom - Math.max(1, Math.round(0.04 * (bottom - top))); y <= bottom; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (solid(x, y)) {
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+      }
+    }
+  }
+  if (minX > maxX) return { center: width / 2, half: width / 2, bottom };
+  return { center: (minX + maxX) / 2, half: Math.max(2, (maxX - minX + 1) / 2), bottom };
+};
+
+/** Contact line + ambient pool under a product standing on a floor, as a full-canvas layer. */
+const standingShadow = async (lib, product, { width, height, left, top }) => {
+  const base = await baseOf(lib, product.data);
+  const cx = left + base.center;
+  const cy = top + base.bottom;
+  // Vertical extent follows the base, capped so the pool fades out before the canvas edge.
+  const s = Math.min(base.half, (height - cy) / 0.45);
+  const ellipse = (id, rx, ry) =>
+    `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${Math.max(2, ry)}" fill="url(#${id})"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+    <defs>
+      <radialGradient id="a"><stop offset="0%" stop-color="#000" stop-opacity="${AMBIENT_OPACITY}"/><stop offset="100%" stop-color="#000" stop-opacity="0"/></radialGradient>
+      <radialGradient id="c"><stop offset="0%" stop-color="#000" stop-opacity="${CONTACT_OPACITY}"/><stop offset="60%" stop-color="#000" stop-opacity="${CONTACT_OPACITY / 2}"/><stop offset="100%" stop-color="#000" stop-opacity="0"/></radialGradient>
+    </defs>
+    ${ellipse('a', base.half * 1.7, s * 0.22)}
+    ${ellipse('c', base.half * 1.1, s * 0.08)}
+  </svg>`;
+  return { input: Buffer.from(svg), left: 0, top: 0 };
+};
+
+/** Soft shadow all around a product lying flat (photographed from above): its own silhouette, nudged down. */
+const flatlayShadow = async (lib, product, { width, height, left, top }) => {
+  const blur = Math.max(1, FLATLAY_BLUR * Math.min(width, height));
+  const pad = Math.ceil(blur * 3);
+  const silhouette = await lib(product.data)
+    .linear([0, 0, 0, FLATLAY_OPACITY], [0, 0, 0, 0]) // black, faded; alpha keeps the shape
+    .png()
+    .toBuffer();
+  const input = await lib(silhouette)
+    .extend({ top: pad, bottom: pad, left: pad, right: pad, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .blur(blur)
+    .png()
+    .toBuffer();
+  return { input, left: left - pad, top: top - pad + Math.round(FLATLAY_OFFSET * height) };
+};
 
 /**
  * Compositing renderer (mock and local): style background + product, at exact size.
  * `input` is the seller photo (mock) or a transparent product cutout (local).
+ * `angle` is the brief's answer: "atas" (flat lay) or "depan" (standing, default).
  * Returns { width, height, bytes, degraded }.
  */
-const renderOutput = async ({ input, style, width, height, targetPath }) => {
+const renderOutput = async ({ input, style, width, height, targetPath, angle = 'depan' }) => {
   const lib = await loadSharp();
   if (!lib) {
     await fs.writeFile(targetPath, input);
@@ -102,25 +165,20 @@ const renderOutput = async ({ input, style, width, height, targetPath }) => {
   const product = await lib(input)
     .rotate() // honour EXIF orientation from phone cameras
     .resize(productBox, productBox, { fit: 'inside', withoutEnlargement: false })
+    .ensureAlpha() // a mock photo is opaque: its "silhouette" is the whole rectangle
+    .png()
     .toBuffer({ resolveWithObject: true });
 
-  const productWidth = product.info.width;
-  const productHeight = product.info.height;
-  const left = Math.round((width - productWidth) / 2);
-  const top = Math.round((height - productHeight) / 2);
-
-  const shadowWidth = Math.round(productWidth * 1.05);
-  const shadowHeight = Math.round(productHeight * 0.16);
+  const place = {
+    width,
+    height,
+    left: Math.round((width - product.info.width) / 2),
+    top: Math.round((height - product.info.height) / 2),
+  };
+  const shadow = angle === 'atas' ? await flatlayShadow(lib, product, place) : await standingShadow(lib, product, place);
 
   await lib(Buffer.from(backgroundSvg(style, width, height)))
-    .composite([
-      {
-        input: Buffer.from(shadowSvg(shadowWidth, shadowHeight)),
-        left: Math.round((width - shadowWidth) / 2),
-        top: Math.min(height - shadowHeight, top + productHeight - Math.round(shadowHeight * 0.45)),
-      },
-      { input: product.data, left, top },
-    ])
+    .composite([shadow, { input: product.data, left: place.left, top: place.top }])
     .jpeg(JPEG)
     .toFile(targetPath);
 
@@ -374,6 +432,7 @@ const generateComposited = async (order, onProgress, settings) => {
         width: job.spec.width,
         height: job.spec.height,
         targetPath: path.join(outDir, filename),
+        angle: order.brief?.answers?.angle,
       });
       results.push(resultRecord(order, job, { filename, meta, source, provider: settings.provider }));
     } catch (error) {

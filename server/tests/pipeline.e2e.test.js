@@ -538,3 +538,21 @@ test('a misconfigured image provider fails the order with a staff-visible reason
   const recovered = await waitForStatus(order.id, 'menunggu_review');
   assert.ok(recovered.results.every((result) => result.provider === 'mock'));
 });
+
+test('the shooting angle picks the shadow: "dari atas" casts one beside the product, "dari depan" only below', async () => {
+  const { default: sharp } = await import('sharp');
+  // Brightness just left of the product's middle, where only a flat-lay shadow reaches.
+  // The mock product is the 900x1200 photo fitted into 74% of 1000px: 555 wide, from x=222.
+  const besideProduct = async (angle) => {
+    const { order } = await makeOrder({ brief: { answers: { angle } } });
+    await json(`/api/v1/orders/${order.id}/pay`, { method: 'POST' });
+    const done = await waitForStatus(order.id, 'menunggu_review');
+    const result = done.results.find((item) => item.width === 1000 && item.height === 1000);
+    assert.ok(result, 'the exact Shopee size is still rendered');
+    const file = path.join(config.paths.results, order.id, result.filename);
+    const { data } = await sharp(file).extract({ left: 212, top: 500, width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true });
+    return data[0];
+  };
+  assert.ok((await besideProduct('depan')) >= 250, 'standing: the white studio stays white beside it');
+  assert.ok((await besideProduct('atas')) < 245, 'flat lay: a soft shadow surrounds it');
+});

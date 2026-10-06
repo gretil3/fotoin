@@ -97,6 +97,7 @@ export const buildPrompt = (order, style, { note, refinement = resolveRefinement
     productName && `Name given by the seller: ${quoted(productName)}`,
     category?.prompt && `Category: ${category.prompt}`,
     ...fragments('productType').map((fragment) => `Type: ${fragment}`),
+    ...fragments('angle'),
   ]);
 
   // A mood the seller wrote joins the ones they tapped.

@@ -112,6 +112,7 @@ Creates the brief, moves it to `menunggu_pembayaran` and issues a charge.
   "brief": {
     "answers": {
       "productType": "frozen-kemasan",
+      "angle": "depan",
       "goal": "foto-utama",
       "keep": ["warna", "label", "bentuk"],
       "mood": ["hangat"]
@@ -126,7 +127,8 @@ Creates the brief, moves it to `menunggu_pembayaran` and issues a charge.
 (`briefQuestions`, plus the category's `productTypes`). The whole `brief`, and every question
 in it, is optional: a missing answer takes the question's `default`, so a seller who taps
 straight through still places a valid order. For a multi-select an explicit `[]` is kept as a
-real choice. `notes` (max 500 characters) is the seller's own words and stays optional.
+real choice. `angle` (`depan` default, or `atas`) is how the photo was taken; the composited
+renderers (`mock`, `local`) use it to pick the shadow (standing vs. flat lay). `notes` (max 500 characters) is the seller's own words and stays optional.
 The stored order gets `brief: { version, answers, usedText }`. `usedText` is set by the server
 from whether `notes` is non-empty; a client-sent value is ignored. Refusals (**422**):
 `UNKNOWN_BRIEF_QUESTION`, `UNKNOWN_BRIEF_OPTION` (including another category's product type),

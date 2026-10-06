@@ -105,7 +105,7 @@ describe('seller brief', () => {
     const order = createOrder(validBrief());
     assert.deepEqual(order.brief, {
       version: 1,
-      answers: { productType: null, goal: 'auto', keep: ['warna', 'label', 'bentuk'], mood: [] },
+      answers: { productType: null, angle: 'depan', goal: 'auto', keep: ['warna', 'label', 'bentuk'], mood: [] },
       usedText: false,
     });
   });
@@ -114,6 +114,7 @@ describe('seller brief', () => {
     const order = createOrder(
       withAnswers({
         productType: 'frozen-kemasan',
+        angle: 'atas',
         goal: 'foto-utama',
         keep: ['label', 'label'],
         mood: ['hangat', 'bersih'],
@@ -121,6 +122,7 @@ describe('seller brief', () => {
     );
     assert.deepEqual(order.brief.answers, {
       productType: 'frozen-kemasan',
+      angle: 'atas',
       goal: 'foto-utama',
       keep: ['label'],
       mood: ['hangat', 'bersih'],
