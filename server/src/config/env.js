@@ -48,13 +48,20 @@ export const config = {
   },
 
   generation: {
+    // mock = paste the photo (default, offline). local = Python pipeline cutout
+    // (services/providers/local.js). gemini = services/providers/gemini.js.
     provider: imageProvider,
     apiKey: process.env.IMAGE_PROVIDER_API_KEY || '',
+    // Empty = the provider's default (providers/gemini.js: DEFAULT_MODEL).
     model: process.env.IMAGE_PROVIDER_MODEL || '',
     // `local` provider: the Python pipeline's HTTP API (pipeline/fotoin/api.py).
     url: (process.env.LOCAL_PIPELINE_URL || 'http://localhost:8000').replace(/\/$/, ''),
-    // Per image, per attempt. CPU segmentation of a 2048px photo takes a few seconds.
-    timeoutMs: int(process.env.IMAGE_PROVIDER_TIMEOUT_MS, 60000),
+    // Bounds a hung request, not a slow one: image models take 10-40 s per call,
+    // local CPU segmentation a few seconds.
+    timeoutMs: int(process.env.IMAGE_PROVIDER_TIMEOUT_MS, 90_000),
+    // Paid calls per generation run (one per style). The biggest pack has 5
+    // styles, so this only trips on a bug, before it can run up a bill.
+    maxCallsPerRun: int(process.env.IMAGE_MAX_CALLS_PER_ORDER, 5),
     mockDelayMs: int(process.env.MOCK_GENERATION_DELAY_MS, 2500),
   },
 

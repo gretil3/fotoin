@@ -26,7 +26,9 @@ Deeper context: `docs/CLAUDE_CODE_PROMPT.md` (current state, rules, task list), 
 Upload → order (brief + seller notes screened by `refine.service.js`, optional Gemini refiner in
 `services/refiners/`) → pay (mock) → `pipeline.service.js` queue → `image.service.js` generate +
 exact marketplace sizing → reviewer approves/rejects (`review.service.js`) → WhatsApp (dry-run).
-`prompt.service.js` builds the per-style image prompt (pure function); it is shown to reviewers but
-no provider uses it yet. Providers live in `services/providers/`: `mock` (default, pastes the photo)
-and `local` (background removal by the Python `pipeline/` over HTTP, `POST /cutout`).
-Generative lifestyle backgrounds are the biggest open gap.
+`prompt.service.js` builds the per-style image prompt (pure function); it is shown to reviewers.
+Providers (`IMAGE_PROVIDER`): `mock` (default, pastes the photo; offline fallback), `local` (the
+one we use: the Python `pipeline/` cuts the product out over HTTP, `POST /cutout`, and
+`image.service.js` composites it on the style backdrop), `gemini` (`services/providers/`, paid,
+kept but unused: sends the prompt with the photo, one call per style, logs staff-only `generations`).
+Generative backgrounds will be local (Stable Diffusion inpainting, background only).

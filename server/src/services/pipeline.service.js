@@ -82,9 +82,15 @@ async function runJob({ orderId }) {
 
     await clearResults(order.id);
 
-    const { results, failed } = await generateForOrder(order, ({ done, total }) => {
+    const { results, failed, generations } = await generateForOrder(order, ({ done, total }) => {
       orders.update(order.id, { progress: { done, total } });
     });
+
+    // Appended, not replaced: a rejected attempt's calls were billed too, and
+    // cost per delivered order is what the pilot has to measure.
+    if (generations.length > 0) {
+      order = orders.update(order.id, { generations: [...(order.generations || []), ...generations] });
+    }
 
     // Never let an empty batch reach a reviewer: there is nothing to review and
     // the seller would be told their photos are done.

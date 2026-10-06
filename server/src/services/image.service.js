@@ -2,12 +2,17 @@
  * Image generation + marketplace resizing.
  *
  * Two layers:
- *   - A *provider* (services/providers/, chosen by IMAGE_PROVIDER) turns a
- *     seller photo into the product image: a transparent cutout (`local`) or,
- *     for `mock`, the untouched photo, which then sits on the backdrop as a
- *     rectangle and is not sellable.
- *   - A *renderer* places that image on the style backdrop and emits one file
- *     per marketplace output spec (exact pixel dimensions, padded not cropped).
+ *   - A *provider* turns a seller photo + a style's prompt into a styled image.
+ *     `gemini` (providers/) edits the photo with an image model, once per style:
+ *     the marketplace only decides the pixel size, not the scene, so one paid
+ *     call serves every size of that style. `mock` is built in and needs no API
+ *     key. It does NOT remove the original background: it places the whole
+ *     photo, as a rectangle, on the style backdrop with a soft shadow. It exists
+ *     to exercise the pipeline offline, not to make sellable images. `local`
+ *     (providers/local.js) gets the product cut out by the Python pipeline and
+ *     composites it the same way: real background removal, free, no key.
+ *   - A *renderer* takes that styled image and emits one file per marketplace
+ *     output spec (exact pixel dimensions, never cropping the scene).
  *
  * sharp is optional at runtime: if the native binary is unavailable the
  * pipeline degrades to copying the source file so the app still runs end to
@@ -19,8 +24,14 @@ import { nanoid } from 'nanoid';
 import config from '../config/env.js';
 import { getMarketplace, getStyle } from '../data/catalog.js';
 import { planOutputs } from './order.service.js';
-import { rerunNote } from './prompt.service.js';
-import PROVIDERS from './providers/index.js';
+import { buildOrderPrompts } from './prompt.service.js';
+import { generateScene } from './providers/index.js';
+import localProvider from './providers/local.js';
+
+const JPEG = { quality: 88, chromaSubsampling: '4:4:4', mozjpeg: true };
+// What an image model is sent: big enough to read a label, small enough to stay
+// well inside request limits whatever a phone camera produced.
+const SOURCE_MAX_PX = 1536;
 
 let sharp = null;
 let sharpChecked = false;
@@ -74,8 +85,9 @@ const shadowSvg = (width, height) => `<svg xmlns="http://www.w3.org/2000/svg" wi
 </svg>`;
 
 /**
- * Renders one marketplace output: style background + product, at exact size.
- * Returns { width, height, bytes, filePath }.
+ * Compositing renderer (mock and local): style background + product, at exact size.
+ * `input` is the seller photo (mock) or a transparent product cutout (local).
+ * Returns { width, height, bytes, degraded }.
  */
 const renderOutput = async ({ input, style, width, height, targetPath }) => {
   const lib = await loadSharp();
@@ -109,9 +121,69 @@ const renderOutput = async ({ input, style, width, height, targetPath }) => {
       },
       { input: product.data, left, top },
     ])
-    .jpeg({ quality: 88, chromaSubsampling: '4:4:4', mozjpeg: true })
+    .jpeg(JPEG)
     .toFile(targetPath);
 
+  const stat = await fs.stat(targetPath);
+  return { width, height, bytes: stat.size, degraded: false };
+};
+
+const MIME_BY_EXT = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+
+/** The seller photo as an image model should see it: upright, bounded, JPEG. */
+const prepareSource = async (sourcePath) => {
+  const lib = await loadSharp();
+  if (!lib) {
+    const mimeType = MIME_BY_EXT[path.extname(sourcePath).toLowerCase()] || 'image/jpeg';
+    return { data: await fs.readFile(sourcePath), mimeType };
+  }
+  const data = await lib(sourcePath)
+    .rotate() // models do not read EXIF: a phone photo would arrive sideways
+    .resize(SOURCE_MAX_PX, SOURCE_MAX_PX, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 90 })
+    .toBuffer();
+  return { data, mimeType: 'image/jpeg' };
+};
+
+/**
+ * Renders one marketplace output from a generated scene, at exact size.
+ * Same shape as the scene (the 1:1 specs): scaled to fill. Other shapes (3:4,
+ * 9:16): the whole scene, centered, its edge pixels stretched outward and blurred
+ * to fill the frame, so the product is never cropped, there are no flat bars,
+ * and the fill meets the scene in matching colors. On a white studio scene the
+ * fill is white too.
+ */
+const renderScene = async ({ scene, width, height, targetPath }) => {
+  const lib = await loadSharp();
+  if (!lib) {
+    await fs.writeFile(targetPath, scene);
+    return { width, height, bytes: scene.length, degraded: true };
+  }
+
+  const meta = await lib(scene).metadata();
+  const sameShape = Math.abs(meta.width / meta.height - width / height) < 0.02;
+
+  let image;
+  if (sameShape) {
+    image = lib(scene).resize(width, height, { fit: 'cover' });
+  } else {
+    const fitted = await lib(scene).resize(width, height, { fit: 'inside' }).toBuffer({ resolveWithObject: true });
+    const left = Math.floor((width - fitted.info.width) / 2);
+    const top = Math.floor((height - fitted.info.height) / 2);
+    const backdrop = await lib(fitted.data)
+      .extend({
+        top,
+        bottom: height - fitted.info.height - top,
+        left,
+        right: width - fitted.info.width - left,
+        extendWith: 'copy',
+      })
+      .blur(30)
+      .toBuffer();
+    image = lib(backdrop).composite([{ input: fitted.data, left, top }]);
+  }
+
+  await image.jpeg(JPEG).toFile(targetPath);
   const stat = await fs.stat(targetPath);
   return { width, height, bytes: stat.size, degraded: false };
 };
@@ -140,15 +212,95 @@ export const inspectImage = async (filePath) => {
  * reported in `failed` so the pipeline can decide whether what remains is
  * shippable.
  *
+ * With a real provider, each style is generated once (one paid call) and every
+ * marketplace size of that style is rendered from that scene. `generations`
+ * records each call (provider, model, cost estimate, the exact prompt) so unit
+ * economics and rejected images can be traced; it is staff-only data.
+ *
  * @param {object} order
  * @param {(progress: {done: number, total: number}) => void} [onProgress]
- * @returns {Promise<{results: Array, failed: Array<{filename: string, error: string}>}>}
+ * @param {object} [deps] injectable for tests: `settings` (defaults to config.generation), `providers`, `sleep`
+ * @returns {Promise<{results: Array, failed: Array<{filename: string, error: string}>, generations: Array}>}
  */
-export const generateForOrder = async (order, onProgress) => {
+export const generateForOrder = async (order, onProgress, deps = {}) => {
+  const settings = deps.settings || config.generation;
+  if (COMPOSITED.has(settings.provider)) return generateComposited(order, onProgress, settings);
+
   const outDir = path.join(config.paths.results, order.id);
   await fs.mkdir(outDir, { recursive: true });
 
-  const jobs = planOutputs(order).map(({ styleId, marketplaceId, spec }) => ({
+  const jobs = planJobs(order);
+  const styleIds = [...new Set(jobs.map((job) => job.styleId))];
+  // Checked before any call: a run either fits the ceiling or costs nothing.
+  if (styleIds.length > settings.maxCallsPerRun) {
+    throw new Error(
+      `Pesanan butuh ${styleIds.length} panggilan AI, melebihi batas IMAGE_MAX_CALLS_PER_ORDER=${settings.maxCallsPerRun}.`,
+    );
+  }
+
+  const prompts = new Map(buildOrderPrompts(order).map((prompt) => [prompt.styleId, prompt]));
+  const generations = [];
+  const scenes = new Map();
+
+  // A failed style is cached as a rejection too, so its other sizes fail without a second paid call.
+  const sceneFor = (styleId) => {
+    if (!scenes.has(styleId)) {
+      // Each style takes a different upload, so a seller's extra angles get used.
+      const source = order.photos[order.styleIds.indexOf(styleId) % order.photos.length];
+      const prompt = prompts.get(styleId);
+      const pending = (async () => {
+        const image = await prepareSource(path.join(config.paths.uploads, source.filename));
+        const output = await generateScene({ prompt: prompt.text, image }, deps);
+        const generation = {
+          id: nanoid(10),
+          styleId,
+          sourcePhotoId: source.id,
+          provider: output.provider,
+          model: output.model,
+          costUsd: output.costUsd,
+          attempts: output.attempts,
+          ms: output.ms,
+          promptVersion: prompt.version,
+          prompt: prompt.text,
+          createdAt: new Date().toISOString(),
+        };
+        generations.push(generation);
+        return { data: output.data, generation, source };
+      })();
+      scenes.set(styleId, pending);
+    }
+    return scenes.get(styleId);
+  };
+
+  const results = [];
+  const failed = [];
+
+  for (const [index, job] of jobs.entries()) {
+    const filename = `${job.styleId}_${job.marketplaceId}_${job.spec.width}x${job.spec.height}_${nanoid(6)}.jpg`;
+    try {
+      const { data, generation, source } = await sceneFor(job.styleId);
+      const meta = await renderScene({
+        scene: data,
+        width: job.spec.width,
+        height: job.spec.height,
+        targetPath: path.join(outDir, filename),
+      });
+      results.push(
+        resultRecord(order, job, { filename, meta, source, provider: generation.provider, generationId: generation.id }),
+      );
+    } catch (error) {
+      console.error(`[image] failed to render ${filename}:`, error.message);
+      failed.push({ filename, error: error.message });
+    }
+    onProgress?.({ done: index + 1, total: jobs.length });
+  }
+
+  return { results, failed, generations };
+};
+
+/** The pack's planned outputs, with their catalog entries resolved. */
+const planJobs = (order) =>
+  planOutputs(order).map(({ styleId, marketplaceId, spec }) => ({
     style: getStyle(order.product.categoryId, styleId),
     styleId,
     marketplace: getMarketplace(marketplaceId),
@@ -156,66 +308,74 @@ export const generateForOrder = async (order, onProgress) => {
     spec,
   }));
 
+const resultRecord = (order, job, { filename, meta, source, provider, generationId = null }) => ({
+  id: nanoid(10),
+  filename,
+  url: `${config.publicUrl}/static/results/${order.id}/${filename}`,
+  sourcePhotoId: source.id,
+  styleId: job.styleId,
+  styleName: job.style?.name || job.styleId,
+  marketplaceId: job.marketplaceId,
+  marketplaceName: job.marketplace.name,
+  label: job.spec.label,
+  width: meta.width,
+  height: meta.height,
+  bytes: meta.bytes,
+  degraded: meta.degraded,
+  provider,
+  generationId,
+  approved: null,
+  reviewerNote: null,
+  createdAt: new Date().toISOString(),
+});
+
+/** Providers whose output is composited here on the style backdrop, never sent to a paid model. */
+const COMPOSITED = new Set(['mock', 'local']);
+
+/**
+ * The free path: every output composited locally, at its own size. `mock`
+ * pastes the photo itself; `local` first has the Python pipeline cut the
+ * product out, once per photo (the cutout does not depend on style or size).
+ */
+const generateComposited = async (order, onProgress, settings) => {
+  const outDir = path.join(config.paths.results, order.id);
+  await fs.mkdir(outDir, { recursive: true });
+
+  const jobs = planJobs(order);
+
   // Cycle through the seller's uploads so every source photo gets used.
   const sources = order.photos;
   const results = [];
   const failed = [];
 
-  const provider = PROVIDERS[config.generation.provider];
-  if (!provider) {
-    throw new Error(
-      `IMAGE_PROVIDER "${config.generation.provider}" belum tersedia. Pilih: ${Object.keys(PROVIDERS).join(', ')}.`,
-    );
-  }
-  const note = rerunNote(order);
-  // One provider call per (photo, style): its marketplace sizes share it, and a
-  // failing call fails all of them without being retried for each size.
-  const generated = new Map();
+  const cutouts = new Map();
+  const productImage = (sourcePath) => {
+    if (settings.provider === 'mock') return fs.readFile(sourcePath);
+    if (!cutouts.has(sourcePath)) {
+      const pending = localProvider.generate({ sourcePath }, { settings });
+      pending.catch(() => {}); // awaited per job below; avoid an unhandled rejection meanwhile
+      cutouts.set(sourcePath, pending);
+    }
+    return cutouts.get(sourcePath);
+  };
 
-  if (config.generation.provider === 'mock' && config.generation.mockDelayMs > 0) {
+  if (settings.provider === 'mock' && config.generation.mockDelayMs > 0) {
     await sleep(config.generation.mockDelayMs);
   }
 
   for (const [index, job] of jobs.entries()) {
     const source = sources[index % sources.length];
-    const sourcePath = path.join(config.paths.uploads, source.filename);
     const filename = `${job.styleId}_${job.marketplaceId}_${job.spec.width}x${job.spec.height}_${nanoid(6)}.jpg`;
-    const targetPath = path.join(outDir, filename);
-
-    const key = `${source.id}:${job.styleId}`;
-    if (!generated.has(key)) {
-      generated.set(key, provider.generate({ sourcePath, style: job.style, order, note }));
-      generated.get(key).catch(() => {}); // awaited below; avoid an unhandled rejection meanwhile
-    }
 
     try {
       const meta = await renderOutput({
-        input: await generated.get(key),
+        input: await productImage(path.join(config.paths.uploads, source.filename)),
         style: job.style,
         width: job.spec.width,
         height: job.spec.height,
-        targetPath,
+        targetPath: path.join(outDir, filename),
       });
-
-      results.push({
-        id: nanoid(10),
-        filename,
-        url: `${config.publicUrl}/static/results/${order.id}/${filename}`,
-        sourcePhotoId: source.id,
-        styleId: job.styleId,
-        styleName: job.style?.name || job.styleId,
-        marketplaceId: job.marketplaceId,
-        marketplaceName: job.marketplace.name,
-        label: job.spec.label,
-        width: meta.width,
-        height: meta.height,
-        bytes: meta.bytes,
-        degraded: meta.degraded,
-        provider: config.generation.provider,
-        approved: null,
-        reviewerNote: null,
-        createdAt: new Date().toISOString(),
-      });
+      results.push(resultRecord(order, job, { filename, meta, source, provider: settings.provider }));
     } catch (error) {
       console.error(`[image] failed to render ${filename}:`, error.message);
       failed.push({ filename, error: error.message });
@@ -224,7 +384,7 @@ export const generateForOrder = async (order, onProgress) => {
     onProgress?.({ done: index + 1, total: jobs.length });
   }
 
-  return { results, failed };
+  return { results, failed, generations: [] };
 };
 
 /** Deletes every generated file for an order (used before a revision re-run). */

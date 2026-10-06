@@ -194,7 +194,11 @@ All variables have working defaults — the app runs with no `.env` at all. Full
 | Variable | Default | Notes |
 |---|---|---|
 | `PORT` | `4000` | API port |
-| `IMAGE_PROVIDER` | `mock` | `mock` pastes the whole photo; `local` removes the background via `pipeline/` (see below) |
+| `IMAGE_PROVIDER` | `mock` | `mock` (offline, pastes the photo), `local` (real background removal via `pipeline/`, free) or `gemini` (paid, unused); see below |
+| `LOCAL_PIPELINE_URL` | `http://localhost:8000` | Where the Python pipeline listens (`local`) |
+| `IMAGE_PROVIDER_API_KEY` | _(empty)_ | `gemini` only: Google AI Studio key with **billing enabled** (image models have no free tier) |
+| `IMAGE_PROVIDER_MODEL` | _(empty)_ | `gemini` only: defaults to `gemini-3.1-flash-image` (~US$0.067 per image) |
+| `IMAGE_MAX_CALLS_PER_ORDER` | `5` | Spend guard: max paid image calls per generation run |
 | `MOCK_GENERATION_DELAY_MS` | `2500` | Simulated AI latency, so the UI progress state is visible |
 | `REFINER_PROVIDER` | `rules` | How the seller's own words are read: `rules` (built in, offline) or `gemini` (falls back to rules on any failure) |
 | `REFINER_API_KEY` | _(empty)_ | Google AI Studio key for `gemini`; reuses `IMAGE_PROVIDER_API_KEY` when both are the same vendor |
@@ -216,17 +220,30 @@ cd pipeline && .venv/bin/uvicorn fotoin.api:app --port 8000   # terminal 1
 IMAGE_PROVIDER=local npm run dev                               # terminal 2
 ```
 
-Other models plug in as a module in `server/src/services/providers/` with this contract:
+The pipeline cuts the product out and color-corrects it (product pixels are never
+regenerated); the server puts it on each style's backdrop at every marketplace size. Free, no
+key. If the laptop or the pipeline is unavailable, `IMAGE_PROVIDER=mock` still runs the whole
+flow offline (photos pasted as rectangles).
 
-```js
-async function generate({ sourcePath, style, order, note }) {
-  // note: the reviewer's rejection note on a rerun.
-  // Return a Buffer: a transparent PNG cutout, or an opaque styled image.
-}
-```
+### Optional: Gemini (paid, not used for now)
 
-The marketplace resizing step downstream is provider-agnostic, so exact output dimensions
-keep working regardless of which model produces the image.
+1. Create a key at <https://aistudio.google.com/apikey> in a Google Cloud project with
+   billing enabled.
+2. In `server/.env`: `IMAGE_PROVIDER=gemini` and `IMAGE_PROVIDER_API_KEY=<your key>`.
+   Optionally `REFINER_PROVIDER=gemini` too; it reuses the same key.
+3. Restart `npm run dev`. The startup banner shows `AI provider gemini (<model>)`, or a
+   warning if the key is missing.
+
+Each style in an order is **one** image call: the seller's photo plus the layered prompt
+from `prompt.service.js` (with the reviewer's note on a rerun). Every marketplace size of
+that style is then rendered from the one result by `image.service.js`: 1:1 sizes are scaled,
+3:4 and 9:16 keep the whole scene and extend its edges with a blur, so nothing is cropped. Each
+call is logged on the order as `generations` (model, cost estimate, exact prompt; staff-only).
+Gemini regenerates the whole picture, product included, so label fidelity is not guaranteed.
+
+Another vendor plugs in as one module in `server/src/services/providers/` exporting
+`{ id, defaultModel, costUsd(model), generate({ prompt, image, apiKey, model, timeoutMs }) }`
+that returns `{ data: Buffer, mimeType }` and throws errors with a short `code`.
 
 ---
 
@@ -267,7 +284,8 @@ This is a pilot-grade codebase. Before real sellers touch it:
 - [ ] Real seller authentication (WhatsApp OTP), and real reviewer accounts with roles. Until
       then `GET /orders` needs a phone number and returns masked numbers, and the reviewer
       token is a `VITE_` variable that ships inside the public JS bundle: it is not a secret
-- [ ] Generative backgrounds for lifestyle styles: `IMAGE_PROVIDER=local` removes the real
+- [ ] Generative backgrounds for scene styles, locally (Stable Diffusion inpainting of the
+      background only, product pixels pasted back): `IMAGE_PROVIDER=local` removes the real
       background, but every style is still a flat colour/gradient backdrop
 - [ ] Drive payment settlement **only** from the provider webhook (the `/pay` shortcut already
       answers 404 once `PAYMENT_PROVIDER` is not `mock`; the mock webhook still accepts anything)

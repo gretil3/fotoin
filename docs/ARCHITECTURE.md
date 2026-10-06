@@ -97,14 +97,18 @@ is always safe, and the product fills ~74% of the frame with margin for marketpl
 
 ### Providers make the product image, the renderer makes the listing
 
-`services/providers/` holds one module per `IMAGE_PROVIDER`, each with
-`generate({ sourcePath, style, order, note }) -> Buffer`. `local` posts the photo to the Python
-pipeline's `POST /cutout` and gets back the color-corrected product as a transparent PNG:
-product pixels are cut out, never regenerated, so labels and colours stay true. `renderOutput`
-then adds the style background, shadow and exact marketplace size, the same for every provider.
-`generate` is called once per (photo, style) and shared by that style's sizes. A provider error
-fails only that image (`failed`); network errors and 5xx are retried once; an unknown
-`IMAGE_PROVIDER` fails the order with the reason in `lastError`. Each result records `provider`.
+`IMAGE_PROVIDER` picks one of two paths in `image.service.js`:
+
+- **Composited** (`mock`, `local`): every output is drawn here, on the style backdrop, at its
+  exact size. `mock` pastes the photo itself. `local` (`providers/local.js`) first posts each
+  photo once to the Python pipeline's `POST /cutout` and gets the color-corrected product back as
+  a transparent PNG: product pixels are cut out, never regenerated, so labels and colours stay
+  true. Network errors and 5xx are retried once; a bad photo fails only its own images.
+- **Generated** (`gemini`, via `providers/index.js` `generateScene`): one paid call per style,
+  every marketplace size rendered from that scene, each call logged as staff-only `generations`.
+
+Each result records `provider`. An unknown `IMAGE_PROVIDER` fails every image, so the order
+becomes `gagal` with the reason in `lastError`.
 
 ### sharp is optional at runtime
 
@@ -178,14 +182,34 @@ function of the order and the catalog, layered as task, product (name, the categ
 `prompt`, type), scene (the style's `prompt`, goal, mood, seller preferences), keep-unchanged,
 avoid, the seller's words (quoted, flattened to one line, labelled as data), reviewer feedback
 on a rerun, and the fixed rules last. Staff can read the result per style, with the
-refinement, at `GET /review/:orderId/prompts`. Nothing sends the prompt to an image model yet:
-that arrives with the first real image provider.
+refinement, at `GET /review/:orderId/prompts`.
+
+### Image generation
+
+With `IMAGE_PROVIDER=gemini`, `image.service.js` makes **one** call per style: the seller's
+photo (EXIF-rotated, at most 1536 px, JPEG) plus that style's prompt goes to
+`providers/gemini.js`, which asks for a 1:1 image. Every marketplace size of the style is
+rendered from that one image: 1:1 specs are scaled, other shapes (3:4, 9:16) center the whole
+scene and extend its edge pixels outward with a blur, so nothing is cropped. Styles take the seller's
+uploads in turn, so extra angles are used.
+
+`providers/index.js` picks the adapter, retries once (after 2 s) on a timeout, network error,
+429 or 5xx, and turns every failure into a short Indonesian staff message with a code
+(`[http-403]`, `[no-image]`...) and never the key. A failed style fails all its sizes without
+a second call; the rest of the order still renders, and an order with nothing rendered
+becomes `gagal` as before. Before any call, a run needing more than
+`IMAGE_MAX_CALLS_PER_ORDER` calls is refused outright.
+
+Each successful call is appended to the order's `generations` (provider, model, estimated
+cost, attempts, duration, prompt version and the exact prompt text), and each result carries
+its `generationId`. Reruns append rather than replace, since rejected attempts were billed too.
+`mock` skips all of this and composites locally at each exact size.
 
 ### Public vs. staff views of an order
 
 Anyone holding an order id or `FTN-` code can read the order, so the public response masks
-the seller's number and omits `lastError` (which can contain server paths) and `refinement`
-(prompt text). What the seller needs from the refinement, which of their sentences were
+the seller's number and omits `lastError` (which can contain server paths), `refinement`
+(prompt text) and `generations` (prompts and our cost per image). What the seller needs from the refinement, which of their sentences were
 ignored and why, is in `briefSummary.ignored`. Staff routes under `/review` return the full
 record.
 
@@ -198,7 +222,7 @@ Each row is isolated to one file. Nothing outside it needs to change.
 | Persistence | JSON file | Postgres + Prisma | `data/store.js` |
 | File storage | Local disk, static route | S3/GCS + signed URLs | `app.js`, `middleware/index.js` |
 | Job queue | In-process FIFO | BullMQ + Redis | `services/pipeline.service.js` |
-| Image model | `mock` rectangle, or `local` cutout (Python `pipeline/`, `IMAGE_PROVIDER=local`) | + generative backgrounds for lifestyle styles | `services/providers/` |
+| Image model | `mock` rectangle, `local` cutout (Python `pipeline/`), or Gemini (`gemini`, paid, unused) | Local generative backgrounds (SD inpainting, background only) | `services/providers/`, `services/image.service.js` |
 | Seller text refiner | Built-in rules | Gemini (`REFINER_PROVIDER=gemini`), rules as fallback | `services/refiners/` |
 | Payments | Fake QRIS payload | Midtrans / Xendit | `services/payment.service.js` |
 | WhatsApp | Logged dry-run | Cloud API | `services/whatsapp.service.js` |

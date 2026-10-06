@@ -238,12 +238,13 @@ router.get('/messages', requireReviewer, (req, res) => {
  * Adds derived, display-only fields the frontend would otherwise recompute, and
  * masks the seller's number: an order id or code is enough to read this, and it
  * is not enough to be handed a phone number. `lastError` is dropped because it
- * can contain server paths, and `refinement` because it is prompt text. What the
+ * can contain server paths, `refinement` because it is prompt text, and
+ * `generations` because it holds prompts and our cost per image. What the
  * seller needs from it (which of their sentences were ignored, and why) is in
  * `briefSummary.ignored`. Staff routes return the full order.
  */
 function decorate(order) {
-  const { lastError: _staffOnly, refinement: _promptText, ...publicOrder } = order;
+  const { lastError: _staffOnly, refinement: _promptText, generations: _costs, ...publicOrder } = order;
   return {
     ...publicOrder,
     seller: { ...order.seller, whatsapp: maskWhatsapp(order.seller.whatsapp) },

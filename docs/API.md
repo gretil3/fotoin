@@ -149,7 +149,9 @@ Premium order with 5 styles and 4 marketplaces is 20 pairs, so it receives 15 im
 
 **201** — the order, with `status: "menunggu_pembayaran"`, a `payment.qrPayload` and a
 `code` (`FTN-XXXXXX`). Public order responses mask the seller's number
-(`seller.whatsapp: "62812*****890"`) and omit `lastError`; staff routes return the full order.
+(`seller.whatsapp: "62812*****890"`) and omit `lastError`, `refinement` and `generations`
+(each image-model call: provider, model, `costUsd` estimate, prompt); staff routes return the
+full order.
 
 ### `GET /orders?whatsapp=`
 
@@ -210,6 +212,7 @@ Approved frames only, grouped per marketplace.
     "label": "Foto Utama 1:1",
     "width": 1000, "height": 1000, "bytes": 98304,
     "provider": "local",
+    "generationId": null,
     "approved": true, "reviewerNote": null
   }]
 }

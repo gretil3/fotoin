@@ -95,6 +95,31 @@ export default function HomePage() {
       </section>
 
       <div className="container">
+        <section className="section demo" aria-label="Video demo FOTOIN">
+          <div className="demo__frame">
+            {/* Placeholder stays underneath until the video file loads. */}
+            <div className="demo__placeholder" aria-hidden="true">
+              <Icon name="image" size={40} strokeWidth={1.6} />
+              <span>Video demo segera hadir</span>
+            </div>
+            {/* Drop the file at web/public/demo.mp4 (optionally demo-poster.jpg). */}
+            <video
+              className="demo__video"
+              src="/demo.mp4"
+              poster="/demo-poster.jpg"
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="auto"
+              aria-hidden="true"
+              onError={(event) => {
+                event.currentTarget.style.display = 'none';
+              }}
+            />
+          </div>
+        </section>
+
         <section className="section home-steps">
           <h2 className="center">Semudah 1, 2, 3</h2>
           <ol className="steps3">
