@@ -22,7 +22,7 @@ color:
   reference: null         # path to a reference image for histogram matching, or null
 
 composite:
-  background: white       # white | gradient
+  background: white       # white | gradient | match (pale tint matching the light on the product)
   padding: 0.10
   style: standing         # standing (shot at product height) | flatlay (shot straight down)
   shadow: true            # contact + ambient shadow under the base

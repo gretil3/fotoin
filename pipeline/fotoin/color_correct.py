@@ -48,6 +48,21 @@ def white_point(rgb: np.ndarray, mask: np.ndarray, target: float = 250, pct: flo
     return np.clip(rgb.astype(np.float32) * gain, 0, 255).round().astype(np.uint8)
 
 
+def light_tint(rgb: np.ndarray, mask: np.ndarray, lightness: float = 96.0, max_chroma: float = 10.0) -> tuple[int, int, int]:
+    """A pale background color matching the light on the product: the average hue of its
+    near-neutral pixels (what should be white/gray, tinted by the light), kept very light and
+    capped in saturation. Warm cafe light -> cream; neutral light or no neutral pixels -> white."""
+    px = rgb[mask].astype(np.float32)
+    hi, lo = px.max(axis=1), px.min(axis=1)
+    neutral = px[((hi - lo) / np.maximum(hi, 1) < 0.25) & (hi > 40) & (hi < 250)]
+    if len(neutral) < max(0.01 * len(px), 50):
+        return (255, 255, 255)
+    ab = cv2.cvtColor((neutral / 255)[None], cv2.COLOR_RGB2LAB)[0, :, 1:].mean(axis=0)
+    ab *= min(1.0, max_chroma / max(float(np.hypot(*ab)), 1e-6))
+    out = cv2.cvtColor(np.float32([[[lightness, ab[0], ab[1]]]]), cv2.COLOR_LAB2RGB)[0, 0]
+    return tuple(int(v) for v in np.clip(out * 255, 0, 255).round())
+
+
 def match_reference(rgb: np.ndarray, mask: np.ndarray, reference: np.ndarray) -> np.ndarray:
     out = rgb.copy()
     matched = match_histograms(rgb[mask][None], reference.reshape(1, -1, 3), channel_axis=-1)[0]

@@ -17,16 +17,18 @@ SHARPEN_SIGMA = 0.002  # unsharp-mask radius as fraction of the short side (2px 
 STYLES = ("standing", "flatlay")
 
 
-def make_background(size: tuple[int, int], kind: str = "white") -> np.ndarray:
+def make_background(size: tuple[int, int], kind: str = "white", tint: tuple[int, int, int] = (255, 255, 255)) -> np.ndarray:
+    """white: flat. gradient / match: soft radial falloff, lightest at the center. tint colors it."""
     w, h = size
     if kind == "white":
-        return np.full((h, w, 3), 255, np.float32)
-    if kind == "gradient":
-        # Soft radial falloff: pure white center, light gray corners.
+        lum = np.full((h, w), 255, np.float32)
+    elif kind in ("gradient", "match"):
         yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
         d = np.hypot((xx - w / 2) / (w / 2), (yy - h / 2) / (h / 2)) / np.sqrt(2)
-        return np.repeat((255 - 25 * d**1.5)[..., None], 3, axis=2)
-    raise ValueError(f"unknown background: {kind}")
+        lum = 255 - 25 * d**1.5
+    else:
+        raise ValueError(f"unknown background: {kind}")
+    return lum[..., None] * (np.float32(tint) / 255)
 
 
 def contact_shadow(a: np.ndarray) -> np.ndarray:
@@ -82,6 +84,7 @@ def composite(
     reflection: bool = False,
     style: str = "standing",
     sharpen: float = 0.0,
+    tint: tuple[int, int, int] = (255, 255, 255),
 ) -> Image.Image:
     """Center the RGBA cutout on the background, scaled to fill the padded frame.
     style: "standing" (shot at product height, floor shadow) or "flatlay" (shot from above)."""
@@ -99,7 +102,7 @@ def composite(
     rgb[y0 : y0 + cut.height, x0 : x0 + cut.width] = px[..., :3]
     a[y0 : y0 + cut.height, x0 : x0 + cut.width] = px[..., 3] / 255
 
-    bg = make_background(size, background)
+    bg = make_background(size, background, tint)
     if shadow:
         bg *= 1 - (contact_shadow(a) if style == "standing" else flatlay_shadow(a))[..., None]
     if reflection and style == "standing":  # a flat-lay has no floor plane to reflect in

@@ -29,7 +29,7 @@ def _fail(status: int, code: str, message: str) -> HTTPException:
 def process_photo(
     file: UploadFile = File(...),
     preset: str = "shopee",
-    bg: Literal["white", "gradient"] | None = None,
+    bg: Literal["white", "gradient", "match"] | None = None,
     style: Literal["standing", "flatlay"] | None = None,
 ) -> Response:
     # Sync def on purpose: FastAPI runs it in a threadpool, so CPU-bound work doesn't block the loop.

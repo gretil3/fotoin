@@ -26,6 +26,7 @@ Without uv: `python3.12 -m venv .venv && .venv/bin/pip install -e .`
 .venv/bin/fotoin photos/*.jpg --preset tokopedia --bg gradient -o out/
 .venv/bin/fotoin input.jpg --reflection     # faint glossy-floor mirror under the product
 .venv/bin/fotoin input.jpg --style flatlay  # photo shot straight down: soft shadow all around
+.venv/bin/fotoin input.jpg --bg match       # pale backdrop tinted to the light on the product
 ```
 
 Output goes next to each input as `<name>_<preset>.jpg` unless `-o` is given.
@@ -39,6 +40,8 @@ curl -F file=@input.jpg "localhost:8000/process?preset=shopee&bg=white" -o out.j
 
 Errors come back as `{"detail": {"code": "...", "message": "<Bahasa Indonesia>"}}`, with codes
 `PRESET_TIDAK_DIKENAL`, `FOTO_TERLALU_BESAR`, `FOTO_TIDAK_VALID`, `PRODUK_TIDAK_TERDETEKSI`.
+
+Seller shooting guide (Bahasa, ready to send on WhatsApp): `PANDUAN_FOTO.md`.
 
 ## Config
 

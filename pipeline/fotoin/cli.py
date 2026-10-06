@@ -12,7 +12,7 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="fotoin", description="Raw product photo -> marketplace-ready image.")
     p.add_argument("inputs", nargs="*", type=Path)
     p.add_argument("--preset", default="shopee")
-    p.add_argument("--bg", choices=["white", "gradient"], help="override config background")
+    p.add_argument("--bg", choices=["white", "gradient", "match"], help="override config background (match: tinted to the light on the product)")
     p.add_argument("--style", choices=["standing", "flatlay"], help="override config style")
     p.add_argument("--reflection", action=argparse.BooleanOptionalAction, help="override config reflection")
     p.add_argument("-o", "--out-dir", type=Path, help="default: next to each input")

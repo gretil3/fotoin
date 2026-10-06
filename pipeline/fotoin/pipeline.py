@@ -5,7 +5,7 @@ from typing import BinaryIO
 import numpy as np
 from PIL import Image
 
-from fotoin.color_correct import correct
+from fotoin.color_correct import correct, light_tint
 from fotoin.composite import composite
 from fotoin.config import Config, Preset
 from fotoin.load import load_image
@@ -39,5 +39,7 @@ def process(
     rgb = decontaminate(correct(np.asarray(img), alpha, cfg.color, ref), alpha, s.decontaminate_px)
     c = cfg.composite
     refl = c.reflection if reflection is None else reflection
+    bg = background or c.background
+    tint = light_tint(rgb, alpha > 250) if bg == "match" else (255, 255, 255)
     cut = cutout(Image.fromarray(rgb), alpha)
-    return composite(cut, preset.size, background or c.background, c.padding, c.shadow, refl, style or c.style, c.sharpen)
+    return composite(cut, preset.size, bg, c.padding, c.shadow, refl, style or c.style, c.sharpen, tint)

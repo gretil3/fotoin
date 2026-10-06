@@ -1,6 +1,6 @@
 import numpy as np
 
-from fotoin.color_correct import gray_world, white_point
+from fotoin.color_correct import gray_world, light_tint, white_point
 
 
 def test_white_balance_does_not_tint_single_color_product():
@@ -36,3 +36,18 @@ def test_white_point_brightens_dim_product_keeping_hue():
 def test_white_point_never_darkens():
     rgb = np.full((20, 20, 3), 255, np.uint8)
     assert np.array_equal(white_point(rgb, np.ones((20, 20), bool)), rgb)
+
+
+def test_light_tint_follows_the_light():
+    mask = np.ones((50, 50), bool)
+    warm = light_tint(np.full((50, 50, 3), (225, 210, 185), np.uint8), mask)  # white cup, cafe light
+    cool = light_tint(np.full((50, 50, 3), (190, 210, 225), np.uint8), mask)
+    assert warm[0] > warm[2] + 10 and min(warm) > 220  # pale cream
+    assert cool[2] > cool[0] + 10 and min(cool) > 220  # pale blue
+    neutral = light_tint(np.full((50, 50, 3), 200, np.uint8), mask)
+    assert max(neutral) - min(neutral) <= 2
+
+
+def test_light_tint_white_when_product_has_no_neutral_pixels():
+    red = np.full((50, 50, 3), (195, 57, 43), np.uint8)
+    assert light_tint(red, np.ones((50, 50), bool)) == (255, 255, 255)
