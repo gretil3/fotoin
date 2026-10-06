@@ -30,6 +30,7 @@ def process_photo(
     file: UploadFile = File(...),
     preset: str = "shopee",
     bg: Literal["white", "gradient"] | None = None,
+    style: Literal["standing", "flatlay"] | None = None,
 ) -> Response:
     # Sync def on purpose: FastAPI runs it in a threadpool, so CPU-bound work doesn't block the loop.
     if preset not in cfg.presets:
@@ -39,7 +40,7 @@ def process_photo(
         raise _fail(413, "FOTO_TERLALU_BESAR", "Foto terlalu besar (maksimal 15 MB).")
     p = cfg.presets[preset]
     try:
-        img = process(data, cfg, p, bg)
+        img = process(data, cfg, p, bg, style=style)
     except (UnidentifiedImageError, Image.DecompressionBombError):
         raise _fail(400, "FOTO_TIDAK_VALID", "File bukan foto yang bisa dibaca.")
     except NoProductError:

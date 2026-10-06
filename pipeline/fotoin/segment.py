@@ -50,6 +50,21 @@ def clean_alpha(alpha: np.ndarray, min_blob_frac: float = 0.02, choke_px: int = 
     return out
 
 
+def decontaminate(rgb: np.ndarray, alpha: np.ndarray, px: int = 2) -> np.ndarray:
+    """Recolor the product's outer rim from its trusted core (normalized convolution), so the old
+    background (brown wood under a black case) doesn't fringe the edge once upscaled."""
+    core = cv2.erode((alpha > 250).astype(np.uint8), np.ones((2 * px + 1,) * 2, np.uint8))
+    if px <= 0 or not core.any():
+        return rgb
+    sigma = 2.0 * px
+    weight = cv2.GaussianBlur(core.astype(np.float32), (0, 0), sigma)
+    fill = cv2.GaussianBlur(rgb.astype(np.float32) * core[..., None], (0, 0), sigma)
+    band = (alpha > 0) & (core == 0) & (weight > 0.01)  # too far from any core pixel: keep as is
+    out = rgb.copy()
+    out[band] = np.clip(fill[band] / weight[band, None], 0, 255).astype(np.uint8)
+    return out
+
+
 def cutout(img: Image.Image, alpha: np.ndarray) -> Image.Image:
     rgba = img.convert("RGBA")
     rgba.putalpha(Image.fromarray(alpha, "L"))

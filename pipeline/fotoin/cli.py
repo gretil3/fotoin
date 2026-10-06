@@ -13,6 +13,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("inputs", nargs="*", type=Path)
     p.add_argument("--preset", default="shopee")
     p.add_argument("--bg", choices=["white", "gradient"], help="override config background")
+    p.add_argument("--style", choices=["standing", "flatlay"], help="override config style")
+    p.add_argument("--reflection", action=argparse.BooleanOptionalAction, help="override config reflection")
     p.add_argument("-o", "--out-dir", type=Path, help="default: next to each input")
     p.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     p.add_argument("--download-models", action="store_true", help="fetch model weights once, then run offline")
@@ -32,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
     preset, failed = cfg.presets[a.preset], 0
     for path in a.inputs:
         try:
-            img = process(path, cfg, preset, a.bg)
+            img = process(path, cfg, preset, a.bg, a.reflection, a.style)
         except NoProductError:
             print(f"{path}: no product detected, skipped", file=sys.stderr)
             failed += 1

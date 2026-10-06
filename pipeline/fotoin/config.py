@@ -13,6 +13,7 @@ class SegmentCfg:
     min_blob_frac: float = 0.02
     choke_px: int = 1
     feather_px: float = 1.0
+    decontaminate_px: int = 2
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,8 @@ class CompositeCfg:
     background: str = "white"
     padding: float = 0.10
     shadow: bool = True
+    reflection: bool = False
+    style: str = "standing"
 
 
 @dataclass(frozen=True)

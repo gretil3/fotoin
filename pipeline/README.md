@@ -24,6 +24,8 @@ Without uv: `python3.12 -m venv .venv && .venv/bin/pip install -e .`
 ```bash
 .venv/bin/fotoin input.jpg --preset shopee --bg white
 .venv/bin/fotoin photos/*.jpg --preset tokopedia --bg gradient -o out/
+.venv/bin/fotoin input.jpg --reflection     # faint glossy-floor mirror under the product
+.venv/bin/fotoin input.jpg --style flatlay  # photo shot straight down: soft shadow all around
 ```
 
 Output goes next to each input as `<name>_<preset>.jpg` unless `-o` is given.
@@ -68,7 +70,11 @@ Checked on real photos (white paper cup, clear plastic cup, earbuds case), 2026-
   of a plain white wall or paper so the see-through areas are already white.
 - **Small product in frame / WhatsApp-compressed photos**: the product gets upscaled 3-5x and looks
   soft. Fill the frame when shooting, and send photos as a document, not as a photo.
+- **Background touching the product** (e.g. something behind a straw tip) can get fused into the
+  cutout. The reviewer has to catch it.
 - **Product cut off by the photo edge** (e.g. a straw): stays cut off. Keep the whole product in frame.
+- **Camera angle**: `standing` needs a photo at product height, `flatlay` one shot straight down.
+  A ~45° photo fits neither and looks off in both; the pixels can't be re-angled without
+  regenerating the product. Reshoot, or let the reviewer reject it.
 - **White-on-white**: a white cup against a light wall segmented fine. A white product on a white
   sheet is untested and may clip edges or fail with `PRODUK_TIDAK_TERDETEKSI`.
-- **Shadow** is synthetic (an offset blur of the mask), not a real contact shadow.

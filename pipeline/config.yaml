@@ -8,6 +8,7 @@ segment:
   min_blob_frac: 0.02     # drop alpha islands smaller than this fraction of the largest one
   choke_px: 1             # shrink the edge by this much to kill background halo
   feather_px: 1.0         # gaussian sigma for the soft edge
+  decontaminate_px: 2     # recolor this outer rim from the product interior (kills background fringe)
 
 color:
   white_balance: true
@@ -21,7 +22,9 @@ color:
 composite:
   background: white       # white | gradient
   padding: 0.10
-  shadow: true
+  style: standing         # standing (shot at product height) | flatlay (shot straight down)
+  shadow: true            # contact + ambient shadow under the base
+  reflection: false       # faint glossy-floor mirror below the product
 
 # TODO: verify current Shopee / Tokopedia / TikTok Shop image requirements before launch.
 presets:

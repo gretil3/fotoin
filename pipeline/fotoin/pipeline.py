@@ -9,7 +9,7 @@ from fotoin.color_correct import correct
 from fotoin.composite import composite
 from fotoin.config import Config, Preset
 from fotoin.load import load_image
-from fotoin.segment import RembgSegmenter, Segmenter, clean_alpha, cutout
+from fotoin.segment import RembgSegmenter, Segmenter, clean_alpha, cutout, decontaminate
 
 
 class NoProductError(ValueError):
@@ -26,6 +26,8 @@ def process(
     cfg: Config,
     preset: Preset,
     background: str | None = None,
+    reflection: bool | None = None,
+    style: str | None = None,
     segmenter: Segmenter | None = None,
 ) -> Image.Image:
     img = load_image(src, cfg.max_side)
@@ -34,6 +36,8 @@ def process(
     if alpha.max() == 0:
         raise NoProductError("no product found in image")
     ref = np.asarray(load_image(cfg.color.reference)) if cfg.color.reference else None
-    rgb = correct(np.asarray(img), alpha, cfg.color, ref)
+    rgb = decontaminate(correct(np.asarray(img), alpha, cfg.color, ref), alpha, s.decontaminate_px)
     c = cfg.composite
-    return composite(cutout(Image.fromarray(rgb), alpha), preset.size, background or c.background, c.padding, c.shadow)
+    refl = c.reflection if reflection is None else reflection
+    cut = cutout(Image.fromarray(rgb), alpha)
+    return composite(cut, preset.size, background or c.background, c.padding, c.shadow, refl, style or c.style)
