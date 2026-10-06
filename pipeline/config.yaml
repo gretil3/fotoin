@@ -15,6 +15,8 @@ color:
   wb_max_shift: 0.12      # clamp per-channel gray-world gain to 1 +/- this
   clahe: true
   clahe_clip: 1.5
+  white_point: true       # brighten so the product's top 2% luminance lands at white_target (max 1.3x)
+  white_target: 250
   exposure: false         # gamma-normalize mean product brightness toward exposure_target
   exposure_target: 0.5
   reference: null         # path to a reference image for histogram matching, or null
@@ -25,6 +27,7 @@ composite:
   style: standing         # standing (shot at product height) | flatlay (shot straight down)
   shadow: true            # contact + ambient shadow under the base
   reflection: false       # faint glossy-floor mirror below the product
+  sharpen: 1.0            # unsharp-mask strength on the product, 0 = off
 
 # TODO: verify current Shopee / Tokopedia / TikTok Shop image requirements before launch.
 presets:

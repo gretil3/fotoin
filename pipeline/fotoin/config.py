@@ -22,6 +22,8 @@ class ColorCfg:
     wb_max_shift: float = 0.12
     clahe: bool = True
     clahe_clip: float = 1.5
+    white_point: bool = True
+    white_target: float = 250
     exposure: bool = False
     exposure_target: float = 0.5
     reference: str | None = None
@@ -34,6 +36,7 @@ class CompositeCfg:
     shadow: bool = True
     reflection: bool = False
     style: str = "standing"
+    sharpen: float = 1.0
 
 
 @dataclass(frozen=True)

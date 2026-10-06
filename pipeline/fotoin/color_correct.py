@@ -37,6 +37,17 @@ def normalize_exposure(rgb: np.ndarray, mask: np.ndarray, target: float = 0.5) -
     return cv2.LUT(rgb, lut)
 
 
+def white_point(rgb: np.ndarray, mask: np.ndarray, target: float = 250, pct: float = 98, max_gain: float = 1.3) -> np.ndarray:
+    """Scale all channels equally so the product's bright end (pct-th luminance percentile) lands
+    near target. Only ever brightens, so hue is kept and a dim cafe photo stops looking dingy
+    against the pure-white studio background."""
+    lum = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)[mask]
+    if len(lum) == 0:
+        return rgb
+    gain = float(np.clip(target / max(np.percentile(lum, pct), 1.0), 1.0, max_gain))
+    return np.clip(rgb.astype(np.float32) * gain, 0, 255).round().astype(np.uint8)
+
+
 def match_reference(rgb: np.ndarray, mask: np.ndarray, reference: np.ndarray) -> np.ndarray:
     out = rgb.copy()
     matched = match_histograms(rgb[mask][None], reference.reshape(1, -1, 3), channel_axis=-1)[0]
@@ -53,6 +64,8 @@ def correct(rgb: np.ndarray, alpha: np.ndarray, cfg: ColorCfg, reference: np.nda
         rgb = normalize_exposure(rgb, mask, cfg.exposure_target)
     if cfg.clahe:
         rgb = clahe(rgb, cfg.clahe_clip)
+    if cfg.white_point:
+        rgb = white_point(rgb, mask, cfg.white_target)
     if reference is not None:
         rgb = match_reference(rgb, mask, reference)
     return rgb

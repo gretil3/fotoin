@@ -44,3 +44,14 @@ def test_flatlay_shadow_surrounds_product_without_floor_line():
     assert out[990, 500].sum() > 3 * 250  # no reflection, no long floor pool
     # Standing style draws nothing beside the product at mid-height.
     assert _render(style="standing")[500, 290].sum() == 3 * 255
+
+
+def test_sharpen_adds_contrast_inside_product_only():
+    stripes = np.zeros((400, 200, 4), np.uint8)
+    stripes[..., :3] = np.where((np.arange(200) // 10) % 2, 180, 80)[None, :, None]
+    stripes[..., 3] = 255
+    cut = Image.fromarray(stripes, "RGBA")
+    soft = np.asarray(composite(cut, (1000, 1000), shadow=False)).astype(int)
+    sharp = np.asarray(composite(cut, (1000, 1000), shadow=False, sharpen=1.0)).astype(int)
+    assert sharp[300:700, 350:650].std() > soft[300:700, 350:650].std()
+    assert np.array_equal(sharp[:90], soft[:90])  # background untouched

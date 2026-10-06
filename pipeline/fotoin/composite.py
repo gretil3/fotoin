@@ -12,6 +12,8 @@ FLATLAY_OPACITY = 0.28
 FLATLAY_OFFSET = 0.012  # fraction of canvas height, downward
 FLATLAY_BLUR = 0.012  # gaussian sigma as fraction of the short side
 
+SHARPEN_SIGMA = 0.002  # unsharp-mask radius as fraction of the short side (2px at 1000px)
+
 STYLES = ("standing", "flatlay")
 
 
@@ -79,6 +81,7 @@ def composite(
     shadow: bool = True,
     reflection: bool = False,
     style: str = "standing",
+    sharpen: float = 0.0,
 ) -> Image.Image:
     """Center the RGBA cutout on the background, scaled to fill the padded frame.
     style: "standing" (shot at product height, floor shadow) or "flatlay" (shot from above)."""
@@ -102,4 +105,7 @@ def composite(
     if reflection and style == "standing":  # a flat-lay has no floor plane to reflect in
         add_reflection(bg, rgb, a)
     out = bg * (1 - a[..., None]) + rgb * a[..., None]
+    if sharpen > 0:  # unsharp mask on the product only; upscaled phone photos are soft
+        detail = out - cv2.GaussianBlur(out, (0, 0), SHARPEN_SIGMA * min(w, h))
+        out += sharpen * detail * a[..., None]
     return Image.fromarray(np.clip(np.rint(out), 0, 255).astype(np.uint8), "RGB")

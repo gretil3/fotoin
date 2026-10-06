@@ -40,4 +40,4 @@ def process(
     c = cfg.composite
     refl = c.reflection if reflection is None else reflection
     cut = cutout(Image.fromarray(rgb), alpha)
-    return composite(cut, preset.size, background or c.background, c.padding, c.shadow, refl, style or c.style)
+    return composite(cut, preset.size, background or c.background, c.padding, c.shadow, refl, style or c.style, c.sharpen)
