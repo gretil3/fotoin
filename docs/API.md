@@ -209,6 +209,7 @@ Approved frames only, grouped per marketplace.
     "marketplaceName": "Shopee",
     "label": "Foto Utama 1:1",
     "width": 1000, "height": 1000, "bytes": 98304,
+    "provider": "local",
     "approved": true, "reviewerNote": null
   }]
 }

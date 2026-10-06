@@ -6,7 +6,7 @@ from PIL import Image
 
 from fotoin.config import load_config
 from fotoin.export import encode
-from fotoin.pipeline import NoProductError, process
+from fotoin.pipeline import NoProductError, process, product_cutout
 
 CFG = load_config()
 
@@ -42,3 +42,12 @@ def test_output_matches_preset(name, bg):
 def test_no_product_raises():
     with pytest.raises(NoProductError):
         process(_photo(), CFG, CFG.presets["shopee"], segmenter=lambda img: np.zeros(img.size[::-1], np.uint8))
+
+
+def test_product_cutout_is_cropped_transparent_product():
+    cut = product_cutout(_photo(), CFG, segmenter=fake_segmenter)
+    assert cut.mode == "RGBA"
+    # Cropped to the 300x300 red square (give or take the choke/feather edge).
+    assert abs(cut.width - 300) <= 4 and abs(cut.height - 300) <= 4
+    r, g, b, a = cut.getpixel((cut.width // 2, cut.height // 2))
+    assert a == 255 and r > 150 and g < 90

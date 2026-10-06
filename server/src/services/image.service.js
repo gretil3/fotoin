@@ -2,15 +2,12 @@
  * Image generation + marketplace resizing.
  *
  * Two layers:
- *   - A *provider* turns a seller photo + a style preset into a styled image.
- *     `mock` is built in and needs no API key. It does NOT remove the original
- *     background: it places the whole photo, as a rectangle, on the style
- *     backdrop with a soft shadow. It exists to exercise the pipeline, sizing and
- *     review flow, not to make sellable images. A real background-removal or
- *     image-edit model must implement the `generate({ sourcePath, style, order })`
- *     contract before any seller sees output.
- *   - A *renderer* takes that styled image and emits one file per marketplace
- *     output spec (exact pixel dimensions, padded not cropped).
+ *   - A *provider* (services/providers/, chosen by IMAGE_PROVIDER) turns a
+ *     seller photo into the product image: a transparent cutout (`local`) or,
+ *     for `mock`, the untouched photo, which then sits on the backdrop as a
+ *     rectangle and is not sellable.
+ *   - A *renderer* places that image on the style backdrop and emits one file
+ *     per marketplace output spec (exact pixel dimensions, padded not cropped).
  *
  * sharp is optional at runtime: if the native binary is unavailable the
  * pipeline degrades to copying the source file so the app still runs end to
@@ -22,6 +19,8 @@ import { nanoid } from 'nanoid';
 import config from '../config/env.js';
 import { getMarketplace, getStyle } from '../data/catalog.js';
 import { planOutputs } from './order.service.js';
+import { rerunNote } from './prompt.service.js';
+import PROVIDERS from './providers/index.js';
 
 let sharp = null;
 let sharpChecked = false;
@@ -78,17 +77,17 @@ const shadowSvg = (width, height) => `<svg xmlns="http://www.w3.org/2000/svg" wi
  * Renders one marketplace output: style background + product, at exact size.
  * Returns { width, height, bytes, filePath }.
  */
-const renderOutput = async ({ sourcePath, style, width, height, targetPath }) => {
+const renderOutput = async ({ input, style, width, height, targetPath }) => {
   const lib = await loadSharp();
   if (!lib) {
-    await fs.copyFile(sourcePath, targetPath);
+    await fs.writeFile(targetPath, input);
     const stat = await fs.stat(targetPath);
     return { width, height, bytes: stat.size, degraded: true };
   }
 
   // Product occupies ~74% of the frame: enough margin for marketplace UI chrome.
   const productBox = Math.round(Math.min(width, height) * 0.74);
-  const product = await lib(sourcePath)
+  const product = await lib(input)
     .rotate() // honour EXIF orientation from phone cameras
     .resize(productBox, productBox, { fit: 'inside', withoutEnlargement: false })
     .toBuffer({ resolveWithObject: true });
@@ -162,6 +161,17 @@ export const generateForOrder = async (order, onProgress) => {
   const results = [];
   const failed = [];
 
+  const provider = PROVIDERS[config.generation.provider];
+  if (!provider) {
+    throw new Error(
+      `IMAGE_PROVIDER "${config.generation.provider}" belum tersedia. Pilih: ${Object.keys(PROVIDERS).join(', ')}.`,
+    );
+  }
+  const note = rerunNote(order);
+  // One provider call per (photo, style): its marketplace sizes share it, and a
+  // failing call fails all of them without being retried for each size.
+  const generated = new Map();
+
   if (config.generation.provider === 'mock' && config.generation.mockDelayMs > 0) {
     await sleep(config.generation.mockDelayMs);
   }
@@ -172,9 +182,15 @@ export const generateForOrder = async (order, onProgress) => {
     const filename = `${job.styleId}_${job.marketplaceId}_${job.spec.width}x${job.spec.height}_${nanoid(6)}.jpg`;
     const targetPath = path.join(outDir, filename);
 
+    const key = `${source.id}:${job.styleId}`;
+    if (!generated.has(key)) {
+      generated.set(key, provider.generate({ sourcePath, style: job.style, order, note }));
+      generated.get(key).catch(() => {}); // awaited below; avoid an unhandled rejection meanwhile
+    }
+
     try {
       const meta = await renderOutput({
-        sourcePath,
+        input: await generated.get(key),
         style: job.style,
         width: job.spec.width,
         height: job.spec.height,
@@ -195,6 +211,7 @@ export const generateForOrder = async (order, onProgress) => {
         height: meta.height,
         bytes: meta.bytes,
         degraded: meta.degraded,
+        provider: config.generation.provider,
         approved: null,
         reviewerNote: null,
         createdAt: new Date().toISOString(),

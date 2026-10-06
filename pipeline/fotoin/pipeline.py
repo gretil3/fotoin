@@ -21,6 +21,26 @@ def get_segmenter(model: str, model_dir: str) -> Segmenter:
     return RembgSegmenter(model, model_dir)
 
 
+def extract(
+    src: str | Path | bytes | BinaryIO, cfg: Config, segmenter: Segmenter | None = None
+) -> tuple[np.ndarray, np.ndarray]:
+    """Segment and color-correct: (rgb HxWx3, alpha HxW). Everything before compositing."""
+    img = load_image(src, cfg.max_side)
+    seg, s = segmenter or get_segmenter(cfg.segment.model, cfg.segment.model_dir), cfg.segment
+    alpha = clean_alpha(seg(img), s.min_blob_frac, s.choke_px, s.feather_px)
+    if alpha.max() == 0:
+        raise NoProductError("no product found in image")
+    ref = np.asarray(load_image(cfg.color.reference)) if cfg.color.reference else None
+    return decontaminate(correct(np.asarray(img), alpha, cfg.color, ref), alpha, s.decontaminate_px), alpha
+
+
+def product_cutout(src: str | Path | bytes | BinaryIO, cfg: Config, segmenter: Segmenter | None = None) -> Image.Image:
+    """The corrected product alone, RGBA, cropped to its bounds. The Node server composites it."""
+    rgb, alpha = extract(src, cfg, segmenter)
+    cut = cutout(Image.fromarray(rgb), alpha)
+    return cut.crop(cut.getchannel("A").getbbox())
+
+
 def process(
     src: str | Path | bytes | BinaryIO,
     cfg: Config,
@@ -30,13 +50,7 @@ def process(
     style: str | None = None,
     segmenter: Segmenter | None = None,
 ) -> Image.Image:
-    img = load_image(src, cfg.max_side)
-    seg, s = segmenter or get_segmenter(cfg.segment.model, cfg.segment.model_dir), cfg.segment
-    alpha = clean_alpha(seg(img), s.min_blob_frac, s.choke_px, s.feather_px)
-    if alpha.max() == 0:
-        raise NoProductError("no product found in image")
-    ref = np.asarray(load_image(cfg.color.reference)) if cfg.color.reference else None
-    rgb = decontaminate(correct(np.asarray(img), alpha, cfg.color, ref), alpha, s.decontaminate_px)
+    rgb, alpha = extract(src, cfg, segmenter)
     c = cfg.composite
     refl = c.reflection if reflection is None else reflection
     bg = background or c.background

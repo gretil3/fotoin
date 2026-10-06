@@ -27,4 +27,6 @@ Upload → order (brief + seller notes screened by `refine.service.js`, optional
 `services/refiners/`) → pay (mock) → `pipeline.service.js` queue → `image.service.js` generate +
 exact marketplace sizing → reviewer approves/rejects (`review.service.js`) → WhatsApp (dry-run).
 `prompt.service.js` builds the per-style image prompt (pure function); it is shown to reviewers but
-the `mock` image provider ignores it. A real image provider is the biggest open gap.
+no provider uses it yet. Providers live in `services/providers/`: `mock` (default, pastes the photo)
+and `local` (background removal by the Python `pipeline/` over HTTP, `POST /cutout`).
+Generative lifestyle backgrounds are the biggest open gap.

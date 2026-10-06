@@ -48,9 +48,13 @@ export const config = {
   },
 
   generation: {
-    provider: process.env.IMAGE_PROVIDER || 'mock',
+    provider: imageProvider,
     apiKey: process.env.IMAGE_PROVIDER_API_KEY || '',
     model: process.env.IMAGE_PROVIDER_MODEL || '',
+    // `local` provider: the Python pipeline's HTTP API (pipeline/fotoin/api.py).
+    url: (process.env.LOCAL_PIPELINE_URL || 'http://localhost:8000').replace(/\/$/, ''),
+    // Per image, per attempt. CPU segmentation of a 2048px photo takes a few seconds.
+    timeoutMs: int(process.env.IMAGE_PROVIDER_TIMEOUT_MS, 60000),
     mockDelayMs: int(process.env.MOCK_GENERATION_DELAY_MS, 2500),
   },
 

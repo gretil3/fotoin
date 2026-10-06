@@ -36,7 +36,11 @@ API (for the WhatsApp bot later):
 ```bash
 .venv/bin/uvicorn fotoin.api:app --port 8000
 curl -F file=@input.jpg "localhost:8000/process?preset=shopee&bg=white" -o out.jpg
+curl -F file=@input.jpg localhost:8000/cutout -o product.png   # transparent product only
 ```
+
+`/cutout` is what the Node server's `IMAGE_PROVIDER=local` calls; the server adds the style
+background and exact marketplace sizes itself.
 
 Errors come back as `{"detail": {"code": "...", "message": "<Bahasa Indonesia>"}}`, with codes
 `PRESET_TIDAK_DIKENAL`, `FOTO_TERLALU_BESAR`, `FOTO_TIDAK_VALID`, `PRODUK_TIDAK_TERDETEKSI`.

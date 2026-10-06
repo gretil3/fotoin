@@ -194,7 +194,7 @@ All variables have working defaults — the app runs with no `.env` at all. Full
 | Variable | Default | Notes |
 |---|---|---|
 | `PORT` | `4000` | API port |
-| `IMAGE_PROVIDER` | `mock` | `mock` needs no API key; see below to plug in a real model |
+| `IMAGE_PROVIDER` | `mock` | `mock` pastes the whole photo; `local` removes the background via `pipeline/` (see below) |
 | `MOCK_GENERATION_DELAY_MS` | `2500` | Simulated AI latency, so the UI progress state is visible |
 | `REFINER_PROVIDER` | `rules` | How the seller's own words are read: `rules` (built in, offline) or `gemini` (falls back to rules on any failure) |
 | `REFINER_API_KEY` | _(empty)_ | Google AI Studio key for `gemini`; reuses `IMAGE_PROVIDER_API_KEY` when both are the same vendor |
@@ -207,15 +207,21 @@ All variables have working defaults — the app runs with no `.env` at all. Full
 | `STORAGE_DIR` | `server/storage` | Where uploads, results and `db.json` live (tests point this at a temp dir) |
 | `WEB_URL` | `http://localhost:5173` | Base of the download link sent in the WhatsApp delivery message |
 
-### Plugging in a real image model
+### Real background removal (`IMAGE_PROVIDER=local`)
 
-`server/src/services/image.service.js` is the only file that talks to a generator. Implement
-one function with this contract and point `IMAGE_PROVIDER` at it:
+Runs the Python pipeline in `pipeline/` (setup in `pipeline/README.md`) next to the server:
+
+```bash
+cd pipeline && .venv/bin/uvicorn fotoin.api:app --port 8000   # terminal 1
+IMAGE_PROVIDER=local npm run dev                               # terminal 2
+```
+
+Other models plug in as a module in `server/src/services/providers/` with this contract:
 
 ```js
-async function generate({ sourcePath, style, order }) {
-  // style.background and style.description carry the preset;
-  // return a Buffer or a file path of the styled image.
+async function generate({ sourcePath, style, order, note }) {
+  // note: the reviewer's rejection note on a rerun.
+  // Return a Buffer: a transparent PNG cutout, or an opaque styled image.
 }
 ```
 
@@ -261,8 +267,8 @@ This is a pilot-grade codebase. Before real sellers touch it:
 - [ ] Real seller authentication (WhatsApp OTP), and real reviewer accounts with roles. Until
       then `GET /orders` needs a phone number and returns masked numbers, and the reviewer
       token is a `VITE_` variable that ships inside the public JS bundle: it is not a secret
-- [ ] Real image generation: the `mock` provider pastes the original photo, background
-      included, onto the style backdrop. It is a pipeline test double, not a product
+- [ ] Generative backgrounds for lifestyle styles: `IMAGE_PROVIDER=local` removes the real
+      background, but every style is still a flat colour/gradient backdrop
 - [ ] Drive payment settlement **only** from the provider webhook (the `/pay` shortcut already
       answers 404 once `PAYMENT_PROVIDER` is not `mock`; the mock webhook still accepts anything)
 - [ ] Verify the WhatsApp webhook signature (`X-Hub-Signature-256`)

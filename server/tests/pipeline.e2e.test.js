@@ -521,3 +521,20 @@ test('orders interrupted by a restart are picked back up at boot', async () => {
   const recovered = await waitForStatus(order.id, 'menunggu_review');
   assert.equal(recovered.results.length, 2);
 });
+
+test('a misconfigured image provider fails the order with a staff-visible reason', async () => {
+  const { order } = await makeOrder();
+  const original = config.generation.provider;
+  config.generation.provider = 'tidak-ada';
+  try {
+    await json(`/api/v1/orders/${order.id}/pay`, { method: 'POST' });
+    await waitForStatus(order.id, 'gagal');
+    const staffView = await json(`/api/v1/review/${order.id}`, { headers: auth });
+    assert.match(staffView.body.order.lastError, /IMAGE_PROVIDER "tidak-ada"/);
+  } finally {
+    config.generation.provider = original;
+  }
+  await json(`/api/v1/review/${order.id}/retry`, { method: 'POST', headers: auth });
+  const recovered = await waitForStatus(order.id, 'menunggu_review');
+  assert.ok(recovered.results.every((result) => result.provider === 'mock'));
+});

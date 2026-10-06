@@ -95,6 +95,17 @@ Marketplace outputs pad with the style background rather than cropping. A crop c
 label off a jar or the sleeve off a gamis, and a wrong crop is worse than a plain one. Padding
 is always safe, and the product fills ~74% of the frame with margin for marketplace UI chrome.
 
+### Providers make the product image, the renderer makes the listing
+
+`services/providers/` holds one module per `IMAGE_PROVIDER`, each with
+`generate({ sourcePath, style, order, note }) -> Buffer`. `local` posts the photo to the Python
+pipeline's `POST /cutout` and gets back the color-corrected product as a transparent PNG:
+product pixels are cut out, never regenerated, so labels and colours stay true. `renderOutput`
+then adds the style background, shadow and exact marketplace size, the same for every provider.
+`generate` is called once per (photo, style) and shared by that style's sizes. A provider error
+fails only that image (`failed`); network errors and 5xx are retried once; an unknown
+`IMAGE_PROVIDER` fails the order with the reason in `lastError`. Each result records `provider`.
+
 ### sharp is optional at runtime
 
 `image.service.js` imports sharp lazily inside a `try/catch`. If the native binary will not
@@ -187,7 +198,7 @@ Each row is isolated to one file. Nothing outside it needs to change.
 | Persistence | JSON file | Postgres + Prisma | `data/store.js` |
 | File storage | Local disk, static route | S3/GCS + signed URLs | `app.js`, `middleware/index.js` |
 | Job queue | In-process FIFO | BullMQ + Redis | `services/pipeline.service.js` |
-| Image model | `mock` compositor | Diffusion/editing API | `services/image.service.js` |
+| Image model | `mock` rectangle, or `local` cutout (Python `pipeline/`, `IMAGE_PROVIDER=local`) | + generative backgrounds for lifestyle styles | `services/providers/` |
 | Seller text refiner | Built-in rules | Gemini (`REFINER_PROVIDER=gemini`), rules as fallback | `services/refiners/` |
 | Payments | Fake QRIS payload | Midtrans / Xendit | `services/payment.service.js` |
 | WhatsApp | Logged dry-run | Cloud API | `services/whatsapp.service.js` |
