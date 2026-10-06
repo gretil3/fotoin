@@ -1,0 +1,31 @@
+max_side: 2048            # cap on the longest side after loading
+
+segment:
+  # All permissive: u2net / u2netp / silueta (Apache-2.0), birefnet-general-lite (MIT).
+  # Never use bria-rmbg (RMBG-1.4/2.0): non-commercial license.
+  model: u2net
+  model_dir: models       # relative to this file; fill once with `fotoin --download-models`
+  min_blob_frac: 0.02     # drop alpha islands smaller than this fraction of the largest one
+  choke_px: 1             # shrink the edge by this much to kill background halo
+  feather_px: 1.0         # gaussian sigma for the soft edge
+
+color:
+  white_balance: true
+  wb_max_shift: 0.12      # clamp per-channel gray-world gain to 1 +/- this
+  clahe: true
+  clahe_clip: 1.5
+  exposure: false         # gamma-normalize mean product brightness toward exposure_target
+  exposure_target: 0.5
+  reference: null         # path to a reference image for histogram matching, or null
+
+composite:
+  background: white       # white | gradient
+  padding: 0.10
+  shadow: true
+
+# TODO: verify current Shopee / Tokopedia / TikTok Shop image requirements before launch.
+presets:
+  shopee:    { size: [1000, 1000], format: jpeg, quality: 92 }
+  tokopedia: { size: [1200, 1200], format: jpeg, quality: 92 }
+  tiktok:    { size: [1200, 1200], format: jpeg, quality: 92 }
+  png:       { size: [1200, 1200], format: png }

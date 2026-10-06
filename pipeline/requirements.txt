@@ -1,0 +1,11 @@
+rembg==2.0.85
+onnxruntime==1.30.0
+opencv-python-headless==5.0.0.93
+numpy==2.5.3
+scikit-image==0.26.0
+pillow==12.3.0
+pyyaml==6.0.3
+fastapi==0.142.2
+uvicorn==0.54.0
+python-multipart==0.0.32
+pytest==9.1.1
