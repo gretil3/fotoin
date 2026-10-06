@@ -852,52 +852,16 @@ a.card:hover {
   display: grid;
   place-items: center;
 }
-.showcase__before .showcase__scene {
-  /* a kitchen table under a yellow lamp */
-  background:
-    radial-gradient(circle at 30% 20%, rgba(255, 214, 120, 0.45), transparent 55%),
-    repeating-linear-gradient(90deg, #8a6440 0 18px, #7b5735 18px 21px, #94704a 21px 44px);
-  filter: saturate(0.85) brightness(0.92);
+.showcase__scene img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: fade-in 0.6s ease;
 }
-.showcase__after .showcase__scene {
-  background: radial-gradient(circle at 50% 35%, #ffffff, #e8f2ea 70%);
-}
-.jar {
-  position: relative;
-  width: 46%;
-  z-index: 1;
-}
-.showcase__before .jar {
-  transform: rotate(9deg) translate(8%, 6%);
-}
-.showcase__shadow {
-  position: absolute;
-  bottom: 17%;
-  width: 52%;
-  height: 9%;
-  border-radius: 50%;
-  background: radial-gradient(rgba(9, 35, 40, 0.3), transparent 70%);
-}
-.clutter {
-  position: absolute;
-  border-radius: 50%;
-}
-.clutter--cup {
-  width: 34%;
-  aspect-ratio: 1;
-  left: -6%;
-  top: 6%;
-  background: radial-gradient(circle, #4a2c18 0 42%, #e9e2d6 44% 62%, transparent 64%);
-}
-.clutter--cloth {
-  width: 60%;
-  height: 26%;
-  right: -16%;
-  bottom: 4%;
-  border-radius: 30%;
-  background: repeating-linear-gradient(45deg, #3d6fa8 0 8px, #e8edf3 8px 16px);
-  transform: rotate(-12deg);
-  opacity: 0.9;
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
 }
 .showcase__tag {
   position: absolute;
@@ -957,9 +921,33 @@ a.card:hover {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .showcase__after {
+  .showcase__after,
+  .showcase__scene img {
     animation: none;
   }
+}
+
+/* Shooting-angle picker on the upload step. */
+.shot-angle {
+  margin: 16px 0 20px;
+}
+.shot-angle__options {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+.shot-angle__drawing {
+  display: block;
+  width: 100%;
+  max-width: 180px;
+  height: auto;
+  margin: 0 auto 8px;
+}
+.shot-angle__tips {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  text-align: left;
+}
+.shot-angle__tips li + li {
+  margin-top: 2px;
 }
 
 /* Looped, muted demo video: a 16:9 frame so any landscape clip fits. */

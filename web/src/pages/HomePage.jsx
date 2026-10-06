@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from '../components/Icon.jsx';
 
@@ -17,27 +18,28 @@ const channels = [
   { name: 'Instagram', color: '#c13584' },
 ];
 
-// The same jar in both frames: the point of the picture is that the product
-// itself does not change, only what is around it.
-function ProductJar() {
-  return (
-    <svg className="jar" viewBox="0 0 120 160" aria-hidden="true">
-      <rect x="22" y="8" width="76" height="26" rx="6" fill="#8f1d14" />
-      <rect x="22" y="26" width="76" height="6" fill="#6f150e" />
-      <path d="M16 44a10 10 0 0110-10h68a10 10 0 0110 10v96a14 14 0 01-14 14H30a14 14 0 01-14-14V44z" fill="#c8321f" />
-      <path d="M24 44h8v100h-2a6 6 0 01-6-6V44z" fill="#ffffff" opacity="0.18" />
-      <rect x="16" y="70" width="88" height="54" fill="#fff4e0" />
-      <text x="60" y="95" textAnchor="middle" fontFamily="Sora, sans-serif" fontWeight="700" fontSize="15" fill="#8f1d14">
-        SAMBAL
-      </text>
-      <text x="60" y="113" textAnchor="middle" fontFamily="Manrope, sans-serif" fontWeight="600" fontSize="10" fill="#6b4a2b">
-        Bu Sari · Pedas
-      </text>
-    </svg>
-  );
+// Real orders run through the local pipeline: a seller's own phone photo, then
+// what the reviewer saw. Same product pixels in both frames; only the
+// background changed. Files live in web/public/examples/.
+const EXAMPLES = [
+  { before: '/examples/airpods-sebelum.jpg', after: '/examples/airpods-sesudah.jpg' },
+  { before: '/examples/baseus-sebelum.jpg', after: '/examples/baseus-sesudah.jpg' },
+];
+const EXAMPLE_MS = 5000;
+
+/** Cycles through EXAMPLES, unless the visitor asked for reduced motion. */
+function useExample() {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const timer = setInterval(() => setIndex((i) => (i + 1) % EXAMPLES.length), EXAMPLE_MS);
+    return () => clearInterval(timer);
+  }, []);
+  return EXAMPLES[index];
 }
 
 export default function HomePage() {
+  const example = useExample();
   return (
     <>
       <section className="hero">
@@ -70,9 +72,7 @@ export default function HomePage() {
           <div className="showcase" aria-hidden="true">
             <figure className="showcase__card showcase__before">
               <div className="showcase__scene">
-                <span className="clutter clutter--cup" />
-                <span className="clutter clutter--cloth" />
-                <ProductJar />
+                <img key={example.before} src={example.before} alt="" width="640" height="640" />
               </div>
               <figcaption>Sebelum</figcaption>
             </figure>
@@ -81,8 +81,7 @@ export default function HomePage() {
             </span>
             <figure className="showcase__card showcase__after">
               <div className="showcase__scene">
-                <span className="showcase__shadow" />
-                <ProductJar />
+                <img key={example.after} src={example.after} alt="" width="640" height="640" />
                 <span className="showcase__tag">1:1 &middot; Shopee</span>
               </div>
               <figcaption>Sesudah</figcaption>

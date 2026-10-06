@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client.js';
 import { rupiah } from '../lib/format.js';
+import ShotAngle from '../components/ShotAngle.jsx';
 import UploadDropzone from '../components/UploadDropzone.jsx';
 import {
   Alert,
@@ -201,6 +202,11 @@ Cukup 3 langkah. Tinggal foto, pilih, bayar.</p>
           <>
             <h3>1. Foto produkmu</h3>
             <p className="small muted">Pakai foto dari HP, apa adanya.</p>
+            <ShotAngle
+              question={briefQuestions.find((question) => question.id === 'angle')}
+              value={form.briefAnswers.angle}
+              onChange={(value) => answer('angle', value)}
+            />
             <UploadDropzone
               files={files}
               onChange={setFiles}
@@ -287,7 +293,8 @@ Cukup 3 langkah. Tinggal foto, pilih, bayar.</p>
                       })}
                     </div>
 
-                    {briefQuestions.map((question) => (
+                    {/* The shooting angle is asked on the upload step, next to its tips. */}
+                    {briefQuestions.filter((question) => question.id !== 'angle').map((question) => (
                       <div className="brief-question" key={question.id}>
                         <div className="brief-question__label">
                           <span>{question.label}</span>
