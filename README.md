@@ -49,7 +49,26 @@ professional studio shoot they cannot afford or schedule. FOTOIN closes that gap
 ```
 
 The seller **never writes a prompt**. They choose a category (Kuliner, Fashion & Hijab,
-Kerajinan, Skincare) and a style preset; the prompt and background treatment are ours.
+Kerajinan, Skincare); the style step is optional and works like a game's settings menu:
+**Default** (our picks, scaled to the pack) or **Custom** (choose styles, answer the brief).
+The prompt and background treatment are ours.
+
+### What the seller gets
+
+The product's own pixels are cut out and never regenerated, so labels and colours stay true.
+Each style is a lit studio sweep (wall bending into floor, key light, contact shadow); white
+stays pure white for the marketplace main image. A "foto" is one distinct image, and every
+marketplace size of it is included free. Packs differ in how rich the images are:
+
+| | Hemat Rp15.000 | Standar Rp20.000 | Premium Rp25.000 |
+|---|---|---|---|
+| Seller photos | 1 | up to 5 (angles) | up to 5 (angles) |
+| Styles | studio white | 3 | all 5 |
+| Extras | — | — | duo shot with depth of field, floor reflection |
+
+The Premium duo shot puts a second, blurred copy of the product behind it. Its layout is
+seeded per photo (side, lean, size, distance; flat lays are scattered), so no two look alike
+and a reviewer's rerun reshuffles it. It is never mirrored, because that would flip labels.
 
 ### Order status machine
 
@@ -77,6 +96,7 @@ person has not looked at. (`REQUIRE_HUMAN_REVIEW=false` exists for load testing 
 |---|---|---|
 | API | Node.js 20+, Express 4, ES modules | Small, boring, easy to hand over |
 | Images | [sharp](https://sharp.pixelplumbing.com/) | Fast native compositing + exact resizing |
+| Cutout | Python pipeline in `pipeline/` (rembg / U2-Net, OpenCV) | Free, local background removal; product pixels untouched |
 | Validation | zod | One schema, seller-facing Bahasa error messages |
 | Uploads | multer (disk storage) | Swap for S3/GCS in production |
 | Storage | JSON file via `src/data/store.js` | Zero-install dev; repository interface ready for Postgres |
@@ -112,13 +132,14 @@ npm run dev
 ### Try the full loop in 60 seconds
 
 1. Open http://localhost:5173 and click **Mulai Pesan**.
-2. Upload any product photo, name the product, pick a category and a style.
-3. Choose a marketplace and a pack, enter a name and a phone number, and create the order.
-4. On the order page, click **Saya sudah bayar** (stands in for the payment webhook).
-5. Watch the progress bar. When it flips to *Menunggu Cek Reviewer*, open
+2. Upload any product photo, name the product, pick a category and a marketplace.
+3. On **Gaya**, keep **Default** (or switch to **Custom** to pick styles yourself).
+4. Choose a pack (Premium shows the duo shot), enter a name and a phone number, and create the order.
+5. On the order page, click **Saya sudah bayar** (stands in for the payment webhook).
+6. Watch the progress bar. When it flips to *Menunggu Cek Reviewer*, open
    **/review** in another tab.
-6. Click any frame you consider bad to mark it rejected, then **Setujui & kirim**.
-7. Back on the order page: the approved images are there, sized per marketplace, with
+7. Click any frame you consider bad to mark it rejected, then **Setujui & kirim**.
+8. Back on the order page: the approved images are there, sized per marketplace, with
    download links. The WhatsApp message the seller would have received is printed in the
    server console and available to staff at `GET /api/v1/messages` (reviewer token required).
 
@@ -147,8 +168,8 @@ fotoin/
 │   │   │   ├── catalog.js          ★ Verticals, styles, marketplace specs, pricing
 │   │   │   └── store.js            JSON-backed repository (swap for Postgres)
 │   │   ├── services/
-│   │   │   ├── order.service.js    Status machine + pack-limit validation
-│   │   │   ├── image.service.js    ★ Generation provider + marketplace rendering
+│   │   │   ├── order.service.js    Status machine, pack limits, planImages/planOutputs
+│   │   │   ├── image.service.js    ★ Studio backdrop, shadows, duo shot, reflection, sizing
 │   │   │   ├── pipeline.service.js In-process job queue (swap for BullMQ)
 │   │   │   ├── review.service.js   ★ Human QA: queue, approve, reject
 │   │   │   ├── whatsapp.service.js Delivery channel + message templates
@@ -166,13 +187,15 @@ fotoin/
 │       ├── components/             Layout, UploadDropzone, shared UI
 │       ├── pages/
 │       │   ├── HomePage.jsx        Landing + pitch
-│       │   ├── CreateOrderPage.jsx ★ 3-step seller wizard (brief folded under "Atur sendiri")
+│       │   ├── CreateOrderPage.jsx ★ 4-step seller wizard (optional style step: Default/Custom)
 │       │   ├── OrderDetailPage.jsx Live status, QRIS, downloads
 │       │   ├── OrdersPage.jsx      Order list / lookup by phone
 │       │   ├── PricingPage.jsx     Packs + FAQ
 │       │   └── ReviewPage.jsx      ★ Reviewer console
 │       ├── lib/format.js           Rupiah, dates, status tones
 │       └── styles/global.css       Design tokens + all styling
+│
+├── pipeline/                       Python cutout service (POST /cutout), see pipeline/README.md
 │
 └── docs/
     ├── ARCHITECTURE.md             How it fits together, and what to replace for production
@@ -240,6 +263,8 @@ that style is then rendered from the one result by `image.service.js`: 1:1 sizes
 3:4 and 9:16 keep the whole scene and extend its edges with a blur, so nothing is cropped. Each
 call is logged on the order as `generations` (model, cost estimate, exact prompt; staff-only).
 Gemini regenerates the whole picture, product included, so label fidelity is not guaranteed.
+It makes one scene per style from the first photo, so extra photos and Premium duo shots are
+composite-only (`mock` / `local`).
 
 Another vendor plugs in as one module in `server/src/services/providers/` exporting
 `{ id, defaultModel, costUsd(model), generate({ prompt, image, apiKey, model, timeoutMs }) }`
@@ -253,17 +278,20 @@ that returns `{ data: Buffer, mimeType }` and throws errors with a short `code`.
 npm test
 ```
 
-60 tests across three files, no test framework dependency (`node:test` only). Tests run
+155 tests across eight files, no test framework dependency (`node:test` only). Tests run
 against a throwaway temp directory (`tests/setup.js`), so they never touch your real
-`server/storage/db.json`.
+`server/storage/db.json`. The main ones:
 
 - `tests/catalog.test.js` — catalog integrity: four verticals, unique style ids, pricing
   stays inside the Rp15.000–Rp25.000 band, packs improve monotonically with price, and every
   brief question and option is well formed (labels, prompt fragments, valid defaults).
 - `tests/order.service.test.js` — phone normalisation and masking, pack-limit validation,
   the seller brief (defaults, unknown options refused, `usedText` derived server-side), the
-  output planner (the pack's photo count is a hard cap), unsafe filenames, and the status
+  planner (photos x styles + duo shots, capped by the pack; every size free), unsafe filenames, and the status
   machine (including that illegal jumps are refused).
+- `tests/studio.backdrop.test.js` — rendered pixels: gradient styles are lit (bright behind
+  the product, dark corners), white stays pure white, the duo copy lands on its seeded side
+  and varies with the seed, and the reflection appears under the base.
 - `tests/pipeline.e2e.test.js` — boots the real app on an ephemeral port and walks the whole
   journey over HTTP: upload → order → pay → generate → review → deliver, asserting that the
   rendered files match each marketplace's pixel spec, that reviewer/outbox/list endpoints are
@@ -284,9 +312,10 @@ This is a pilot-grade codebase. Before real sellers touch it:
 - [ ] Real seller authentication (WhatsApp OTP), and real reviewer accounts with roles. Until
       then `GET /orders` needs a phone number and returns masked numbers, and the reviewer
       token is a `VITE_` variable that ships inside the public JS bundle: it is not a secret
-- [ ] Generative backgrounds for scene styles, locally (Stable Diffusion inpainting of the
-      background only, product pixels pasted back): `IMAGE_PROVIDER=local` removes the real
-      background, but every style is still a flat colour/gradient backdrop
+- [ ] Optional: generative scene backgrounds, locally (Stable Diffusion inpainting of the
+      background only, product pixels pasted back). Tried and paused: ~9 s/image on a 4 GB
+      GPU, but it sometimes grows the product and needs an automatic check. Studio-lit
+      backdrops cover the current styles
 - [ ] Drive payment settlement **only** from the provider webhook (the `/pay` shortcut already
       answers 404 once `PAYMENT_PROVIDER` is not `mock`; the mock webhook still accepts anything)
 - [ ] Verify the WhatsApp webhook signature (`X-Hub-Signature-256`)
