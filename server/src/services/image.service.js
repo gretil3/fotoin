@@ -48,27 +48,57 @@ const loadSharp = async () => {
   return sharp;
 };
 
-/** Builds an SVG backdrop for a style preset (solid or vertical gradient). */
-const backgroundSvg = (style, width, height) => {
+// Studio-light look for gradient styles. Tune by eye with real cutouts.
+const KEY_LIGHT = 0.42; // white glow on the wall behind the product
+const FLOOR_LIGHT = 0.22; // pool of light on the floor around the base
+const VIGNETTE = 0.32; // darkening at the corners
+const HORIZON_ABOVE_BASE = 0.2; // where the wall bends into the floor, fraction of height above the base
+const HORIZON_SOFTNESS = 0.22; // half-width of that bend, fraction of height
+
+const pct = (v) => `${Math.round(Math.min(1, Math.max(0, v)) * 1000) / 10}%`;
+
+/**
+ * SVG backdrop for a style preset. Solid stays flat (white is the marketplace
+ * main image). Gradient becomes a lit studio: colors[0] is the wall, colors[1]
+ * the floor of a seamless sweep that bends just behind the product's base
+ * (`floorY`), with a key light behind the product, a light pool on the floor
+ * and a vignette. Without `floorY` (flat lay, shot from above) there is no
+ * horizon: the light pool sits under the product's center instead.
+ */
+const backgroundSvg = (style, width, height, floorY = null, centerY = height / 2) => {
   const colors = style?.background?.colors || ['#ffffff'];
-  if (style?.background?.type === 'gradient' && colors.length > 1) {
+  if (style?.background?.type !== 'gradient' || colors.length < 2) {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-      <defs>
-        <linearGradient id="bg" x1="0" y1="0" x2="0.35" y2="1">
-          <stop offset="0%" stop-color="${colors[0]}"/>
-          <stop offset="100%" stop-color="${colors[1]}"/>
-        </linearGradient>
-        <radialGradient id="glow" cx="50%" cy="38%" r="62%">
-          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.34"/>
-          <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
-        </radialGradient>
-      </defs>
-      <rect width="${width}" height="${height}" fill="url(#bg)"/>
-      <rect width="${width}" height="${height}" fill="url(#glow)"/>
+      <rect width="${width}" height="${height}" fill="${colors[0]}"/>
     </svg>`;
   }
+  const [wall, floor] = colors;
+  const horizon = floorY === null ? 0.5 : floorY / height - HORIZON_ABOVE_BASE;
+  const soft = floorY === null ? 0.5 : HORIZON_SOFTNESS;
+  const poolY = floorY ?? centerY;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-    <rect width="${width}" height="${height}" fill="${colors[0]}"/>
+    <defs>
+      <linearGradient id="sweep" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="${pct(horizon - soft)}" stop-color="${wall}"/>
+        <stop offset="${pct(horizon + soft)}" stop-color="${floor}"/>
+      </linearGradient>
+      <radialGradient id="key" gradientUnits="userSpaceOnUse" cx="${width / 2}" cy="${centerY}" r="${0.6 * Math.max(width, height)}">
+        <stop offset="0%" stop-color="#fff" stop-opacity="${KEY_LIGHT}"/>
+        <stop offset="100%" stop-color="#fff" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="pool">
+        <stop offset="0%" stop-color="#fff" stop-opacity="${FLOOR_LIGHT}"/>
+        <stop offset="100%" stop-color="#fff" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="vignette" r="75%">
+        <stop offset="55%" stop-color="#000" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="${VIGNETTE}"/>
+      </radialGradient>
+    </defs>
+    <rect width="${width}" height="${height}" fill="url(#sweep)"/>
+    <rect width="${width}" height="${height}" fill="url(#key)"/>
+    <ellipse cx="${width / 2}" cy="${poolY}" rx="${0.48 * width}" ry="${0.16 * height}" fill="url(#pool)"/>
+    <rect width="${width}" height="${height}" fill="url(#vignette)"/>
   </svg>`;
 };
 
@@ -152,7 +182,7 @@ const flatlayShadow = async (lib, product, { width, height, left, top }) => {
  * `angle` is the brief's answer: "atas" (flat lay) or "depan" (standing, default).
  * Returns { width, height, bytes, degraded }.
  */
-const renderOutput = async ({ input, style, width, height, targetPath, angle = 'depan' }) => {
+export const renderOutput = async ({ input, style, width, height, targetPath, angle = 'depan' }) => {
   const lib = await loadSharp();
   if (!lib) {
     await fs.writeFile(targetPath, input);
@@ -177,7 +207,8 @@ const renderOutput = async ({ input, style, width, height, targetPath, angle = '
   };
   const shadow = angle === 'atas' ? await flatlayShadow(lib, product, place) : await standingShadow(lib, product, place);
 
-  await lib(Buffer.from(backgroundSvg(style, width, height)))
+  const floorY = angle === 'atas' ? null : place.top + product.info.height;
+  await lib(Buffer.from(backgroundSvg(style, width, height, floorY, place.top + product.info.height / 2)))
     .composite([shadow, { input: product.data, left: place.left, top: place.top }])
     .jpeg(JPEG)
     .toFile(targetPath);

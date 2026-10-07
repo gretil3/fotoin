@@ -82,6 +82,11 @@ per order fell as planned rather than tracking volume linearly.
 - Short product videos (the same pipeline, different output specs)
 - Marketplace-ready copy: title, description, keywords alongside the images
 - Reseller white-label — an agency running FOTOIN under their own name
+- **Seasonal membership** (seller feedback, lecturer liked it): a monthly subscription that
+  automatically re-styles a member's product photos for each seasonal event (17 Agustus,
+  Lebaran, Natal, Imlek, Harbolnas 11.11/12.12). Builds on the generative background: a seasonal
+  style is just a new background prompt. Gated by the non-goal below: launch only once the
+  60-day repeat rate (A3) shows sellers come back on their own.
 - Expansion to a comparable market (Philippines, Vietnam) once the playbook is proven
 
 ---
