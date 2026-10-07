@@ -10,6 +10,7 @@ import {
   isSafeFilename,
   maskWhatsapp,
   normalizeWhatsapp,
+  planImages,
   planOutputs,
   plannedOutputCount,
   transition,
@@ -61,13 +62,18 @@ describe('createOrder', () => {
     );
   });
 
-  test('rejects more marketplaces than the pack allows', () => {
+  test('rejects more photos than the pack allows', () => {
+    const photos = [{ id: 'p1', filename: 'a.jpg' }, { id: 'p2', filename: 'b.jpg' }];
     assert.throws(
-      () =>
-        createOrder(
-          validBrief({ packId: 'hemat', styleIds: ['studio-putih'], marketplaceIds: ['shopee', 'tokopedia'] }),
-        ),
-      /hanya mencakup 1 marketplace/,
+      () => createOrder(validBrief({ packId: 'hemat', styleIds: ['studio-putih'], photos })),
+      /hanya mencakup 1 foto/,
+    );
+  });
+
+  test('a studio-only pack refuses any style but the white studio', () => {
+    assert.throws(
+      () => createOrder(validBrief({ packId: 'hemat', styleIds: ['meja-kayu'] })),
+      /hanya untuk latar studio putih/,
     );
   });
 
@@ -205,18 +211,26 @@ describe('status machine', () => {
   });
 });
 
+const fivePhotos = ['a', 'b', 'c', 'd', 'e'].map((name, i) => ({ id: `p${i}`, filename: `${name}.jpg` }));
+
 describe('plannedOutputCount', () => {
-  test('is capped by the pack photo count', () => {
-    // 2 styles x (2 shopee + 2 tokopedia outputs) = 8, pack standar allows 10.
+  test('counts distinct images, not sizes: every photo in every style', () => {
+    // 2 styles x 1 photo, each in 4 sizes (2 shopee + 2 tokopedia) that do not count.
     const order = createOrder(validBrief());
-    assert.equal(plannedOutputCount(order), 8);
+    assert.equal(plannedOutputCount(order), 2);
+    assert.equal(planOutputs(order).length, 8);
   });
 
-  test('never exceeds what the seller paid for', () => {
+  test('premium adds one duo shot per photo, in the first style', () => {
     const order = createOrder(
-      validBrief({ packId: 'hemat', styleIds: ['studio-putih'], marketplaceIds: ['shopee'] }),
+      validBrief({ packId: 'premium', styleIds: ['meja-kayu', 'studio-putih'], photos: fivePhotos.slice(0, 2) }),
     );
-    assert.equal(plannedOutputCount(order), 2);
+    const duos = planImages(order).filter((image) => image.variant === 'duo');
+    assert.deepEqual(
+      duos.map((image) => [image.photoIndex, image.styleId]),
+      [[0, 'meja-kayu'], [1, 'meja-kayu']],
+    );
+    assert.equal(plannedOutputCount(order), 2 * 2 + 2);
   });
 });
 
@@ -234,37 +248,19 @@ describe('planOutputs', () => {
       0,
       pack.maxMarketplaces,
     );
-    return createOrder(validBrief({ packId, styleIds, marketplaceIds }));
+    return createOrder(validBrief({ packId, styleIds, marketplaceIds, photos: fivePhotos.slice(0, pack.maxPhotos) }));
   };
 
-  test('never plans more images than the pack promises, even fully selected', () => {
+  test('a fully selected pack plans exactly the images it promises', () => {
     for (const pack of PACKS) {
-      const planned = planOutputs(maxedOut(pack.id));
-      assert.ok(
-        planned.length <= pack.photoCount,
-        `${pack.id}: planned ${planned.length}, promised ${pack.photoCount}`,
-      );
+      assert.equal(plannedOutputCount(maxedOut(pack.id)), pack.photoCount, pack.id);
     }
   });
 
-  test('when the cap bites, primary sizes are produced before secondary ones', () => {
-    // Premium: 5 styles x 4 marketplaces = 20 primary outputs, budget 15.
-    const planned = planOutputs(maxedOut('premium'));
-    assert.equal(planned.length, 15);
-    for (const job of planned) {
-      assert.equal(
-        job.spec,
-        getMarketplace(job.marketplaceId).outputs[0],
-        `${job.styleId}/${job.marketplaceId} planned a secondary size while primaries were dropped`,
-      );
-    }
-    const pairs = new Set(planned.map((job) => `${job.styleId}/${job.marketplaceId}`));
-    assert.equal(pairs.size, 15, 'each planned image is a distinct style x marketplace pair');
-  });
-
-  test('the count shown to the seller is the number actually planned', () => {
+  test('every planned image comes in every size of every chosen marketplace', () => {
     const order = maxedOut('premium');
-    assert.equal(plannedOutputCount(order), planOutputs(order).length);
+    const sizes = order.marketplaceIds.reduce((sum, id) => sum + getMarketplace(id).outputs.length, 0);
+    assert.equal(planOutputs(order).length, planImages(order).length * sizes);
   });
 });
 

@@ -38,3 +38,42 @@ test('studio-putih stays pure white for the marketplace main image', async () =>
   const lum = await render('studio-putih');
   assert.ok(lum(5, 5) >= 254 && lum(395, 5) >= 254, `corners ${lum(5, 5)}, ${lum(395, 5)}`);
 });
+
+// A tall gray product, cropped tight like a real cutout: 99x296 in a 400 frame, x 150..250, base at y=348.
+const bottle = await sharp({ create: { width: 10, height: 30, channels: 4, background: '#808080' } }).png().toBuffer();
+
+const renderBottle = async (name, options) => {
+  const targetPath = path.join(os.tmpdir(), `fotoin-studio-${process.pid}-${name}.jpg`);
+  const style = getStyle('kuliner', 'studio-putih');
+  await renderOutput({ input: bottle, style, width: 400, height: 400, targetPath, ...options });
+  const { data } = await sharp(targetPath).greyscale().raw().toBuffer({ resolveWithObject: true });
+  return (x, y) => data[y * 400 + x];
+};
+
+test('a duo shot puts a second copy behind, on the side its seed picks', async () => {
+  const single = await renderBottle('single', {});
+  // Seed "b" puts the back copy right, "a" left (first byte of their sha256).
+  const right = await renderBottle('duo-b', { variant: 'duo', seed: 'b' });
+  const left = await renderBottle('duo-a', { variant: 'duo', seed: 'a' });
+  assert.ok(single(270, 230) > 250 && single(130, 230) > 250, 'single leaves both sides empty');
+  assert.ok(right(270, 230) < 180, `right ${right(270, 230)}`);
+  assert.ok(left(130, 230) < 180, `left ${left(130, 230)}`);
+});
+
+test('a duo layout is the same for the same seed and changes with it', async () => {
+  const same = async (seed) => (await renderBottle(`seed-${seed}`, { variant: 'duo', seed }))(150, 150);
+  const differs = async (a, b) => {
+    const [x, y] = [await renderBottle(`dx-${a}`, { variant: 'duo', seed: a }), await renderBottle(`dy-${b}`, { variant: 'duo', seed: b })];
+    let diff = 0;
+    for (let row = 100; row < 350; row += 5) for (let col = 0; col < 400; col += 5) diff += Math.abs(x(col, row) - y(col, row));
+    return diff;
+  };
+  assert.equal(await same('order:0:0'), await same('order:0:0'));
+  assert.ok((await differs('b', 'c')) > 1000, 'two right-side seeds still lean and scale differently');
+});
+
+test('reflection mirrors the product just below its base', async () => {
+  const plain = await renderBottle('plain', {});
+  const mirrored = await renderBottle('mirrored', { reflection: true });
+  assert.ok(plain(200, 352) - mirrored(200, 352) > 5, `plain ${plain(200, 352)} vs mirrored ${mirrored(200, 352)}`);
+});

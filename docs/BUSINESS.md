@@ -63,11 +63,17 @@ Pay per pack, Rp15.000–Rp25.000. The band is chosen to sit below the threshold
 seller stops to think — roughly the price of lunch — so trying FOTOIN is not a decision that
 needs discussing with anyone.
 
-| Pack | Price | Photos | Styles | Marketplaces | Turnaround | Free revisions |
-|---|---|---|---|---|---|---|
-| Hemat | Rp15.000 | 5 | 1 | 1 | ~6 h | 0 |
-| **Standar** | **Rp20.000** | **10** | **3** | **3** | **~3 h** | **1** |
-| Premium | Rp25.000 | 15 | 5 | 4 (+ Instagram) | ~1 h | 2 |
+Packs differ in how rich the images are, not in how many sizes: a "foto" is one distinct
+image, and every marketplace size of it is included in every pack.
+
+| Pack | Price | Seller photos | Styles | Extras | Max fotos | Turnaround | Free revisions |
+|---|---|---|---|---|---|---|---|
+| Hemat | Rp15.000 | 1 | studio white only | — | 1 | ~6 h | 0 |
+| **Standar** | **Rp20.000** | **up to 5 (angles)** | **3** | **—** | **15** | **~3 h** | **1** |
+| Premium | Rp25.000 | up to 5 (angles) | all 5 | duo shot with depth of field, floor reflection | 30 | ~1 h | 2 |
+
+First draft (2026-10-07), to iterate on: Hemat may be too thin. Watch reviewer load: a full
+Premium order is 30 images, up to 240 files across 4 marketplaces.
 
 Standar is positioned as the default: it is the middle option, carries the "Terlaris" badge,
 and is the first pack that covers a seller's realistic multi-channel need.

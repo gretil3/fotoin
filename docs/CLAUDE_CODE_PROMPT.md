@@ -37,7 +37,7 @@ npm workspaces monorepo (`server/`, `web/`). Start with `npm run dev`; test with
 order status machine, the async queue with progress, exact marketplace pixel sizing, the
 reviewer console (approve, drop frames, reject with a note, retry failed orders), and a
 hardened set of endpoints (uploads are decoded and recorded, orders may only use server-issued
-photo ids, the pack's `photoCount` is a hard cap via `planOutputs()`, empty generations become
+photo ids, the pack's `photoCount` caps distinct images via `planImages()`, empty generations become
 `gagal` instead of reaching review, interrupted jobs are recovered at boot, order listing and
 the WhatsApp outbox are staff-only, public responses mask phone numbers).
 
@@ -148,8 +148,8 @@ assumptions in `docs/BUSINESS.md` (A1 will they pay, A2 does QA fit in ~3 minute
 
 ## Known open questions for the owner (ask, do not guess)
 
-- What is a "photo" in a pack? A Hemat pack promises 5 photos but 1 style x 1 marketplace yields
-  2 sizes. Premium with 5 styles x 4 marketplaces is 20 style/marketplace pairs against a
-  15-image budget, so some combinations are dropped. Is that acceptable or should packs be redefined?
+- ~~What is a "photo" in a pack?~~ Decided 2026-10-07: one distinct image, all sizes free;
+  packs differ by richness (see `docs/BUSINESS.md`). First draft, Hemat may be too thin.
 - Pilot shortcut: is a **concierge MVP** acceptable for the 20-seller pilot (static QRIS with an
-  admin "mark paid" button, delivery via a `wa.me` link) so payments/WhatsApp integration can wait?
+  admin "mark paid" button) so payments can wait? Owner, 2026-10-07: no WhatsApp at all for now,
+  delivery through the web order page; revisit WhatsApp later.

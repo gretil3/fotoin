@@ -141,13 +141,17 @@ An id the server never issued returns **422 `UNKNOWN_PHOTO`**.
 Validation enforced beyond the schema:
 
 - `styleIds.length` ≤ the pack's `maxStyles`, and every style must belong to `categoryId`
+- a `studioOnly` pack (Hemat) accepts only the category's default white style: **422 `STUDIO_ONLY`**
 - `marketplaceIds.length` ≤ the pack's `maxMarketplaces`
-- at least one photo
+- at least one photo, at most the pack's `maxPhotos`: **422 `TOO_MANY_PHOTOS`**
 
-**The pack's `photoCount` is a hard cap on generated images.** The pipeline renders at most
-that many, primary sizes of every style × marketplace pair first, then secondary sizes. A
-Premium order with 5 styles and 4 marketplaces is 20 pairs, so it receives 15 images.
-`plannedOutputs` on the order is exactly the number that will be produced.
+**A "foto" is one distinct image; its sizes are free.** Every uploaded photo is rendered in
+every chosen style, plus (Premium, `duoShot`) one duo shot per photo in the first style: the
+product again behind it, smaller and blurred. Each of those images is rendered in every size of
+every chosen marketplace. The pack's `photoCount` caps the distinct images (Hemat 1, Standar
+15, Premium 30). `plannedOutputs` on the order is that number of distinct images; results
+carry `variant: "single" | "duo"`. Premium (`reflection`) also mirrors standing products on a
+glossy floor.
 
 **201** — the order, with `status: "menunggu_pembayaran"`, a `payment.qrPayload` and a
 `code` (`FTN-XXXXXX`). Public order responses mask the seller's number

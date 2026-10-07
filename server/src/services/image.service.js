@@ -18,11 +18,12 @@
  * pipeline degrades to copying the source file so the app still runs end to
  * end (useful in class demos on locked-down machines).
  */
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
 import config from '../config/env.js';
-import { getMarketplace, getStyle } from '../data/catalog.js';
+import { getMarketplace, getPack, getStyle } from '../data/catalog.js';
 import { planOutputs } from './order.service.js';
 import { buildOrderPrompts } from './prompt.service.js';
 import { generateScene } from './providers/index.js';
@@ -176,13 +177,90 @@ const flatlayShadow = async (lib, product, { width, height, left, top }) => {
   return { input, left: left - pad, top: top - pad + Math.round(FLATLAY_OFFSET * height) };
 };
 
+// Premium extras. Tune by eye with real cutouts.
+const REFLECTION_OPACITY = 0.22; // at the base, fading to 0
+const REFLECTION_LENGTH = 0.35; // fraction of product height
+const DUO_FRONT = 0.62; // front product box, fraction of the short side
+const DUO_BACK = 0.85; // back copy's size relative to the front
+const DUO_LIFT = 0.06; // back copy's base sits this much higher (further away), fraction of height
+const DUO_BLUR = 0.006; // back copy's gaussian sigma, fraction of the short side: the depth of field
+const DUO_LEAN = [6, 16]; // back copy leans away from the front copy by this many degrees
+const FLATLAY_TURN = [5, 20]; // flat lay: both copies turned like items scattered on a table
+
+/**
+ * A duo layout picked from `seed`, so every size of one image shares it (and a
+ * rerun with another seed looks different). Never mirrored: that flips labels.
+ */
+const duoLayout = (seed, flatlay) => {
+  const bytes = createHash('sha256').update(String(seed)).digest();
+  const pick = (i, [lo, hi]) => lo + (bytes[i] / 255) * (hi - lo);
+  const side = bytes[0] < 128 ? 1 : -1; // back copy to the right (1) or left (-1)
+  return {
+    side,
+    backAngle: side * (flatlay ? pick(1, FLATLAY_TURN) : pick(1, DUO_LEAN)),
+    frontAngle: flatlay ? -side * pick(2, FLATLAY_TURN) : 0,
+    backScale: DUO_BACK * pick(3, [0.85, 1.05]),
+    lift: DUO_LIFT * pick(4, [0.6, 1.4]),
+  };
+};
+
+const turn = (lib, product, angle) =>
+  angle
+    ? lib(product.data)
+        .rotate(angle, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png()
+        .toBuffer({ resolveWithObject: true })
+    : product;
+
+const clamp = (value, lo, hi) => Math.min(Math.max(value, lo), Math.max(lo, hi));
+
+/** A fading upside-down copy of a standing product, hung from its base, cut off at the canvas edge. */
+const reflectionLayer = async (lib, product, { height, left, top }) => {
+  const { width: w, height: h } = product.info;
+  const length = Math.min(Math.round(REFLECTION_LENGTH * h), height - (top + h));
+  if (length <= 0) return [];
+  const flipped = await lib(product.data).flip().png().toBuffer();
+  const cropped = await lib(flipped).extract({ left: 0, top: 0, width: w, height: length }).png().toBuffer();
+  const fade = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${length}">
+    <defs><linearGradient id="f" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#000" stop-opacity="${REFLECTION_OPACITY}"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+    </linearGradient></defs>
+    <rect width="${w}" height="${length}" fill="url(#f)"/>
+  </svg>`;
+  const input = await lib(cropped).composite([{ input: Buffer.from(fade), blend: 'dest-in' }]).png().toBuffer();
+  return [{ input, left, top: top + h }];
+};
+
+/** The product scaled into a `box` x `box` square, as a PNG with its dimensions. */
+const fitProduct = (lib, input, box) =>
+  lib(input)
+    .rotate() // honour EXIF orientation from phone cameras
+    .resize(box, box, { fit: 'inside', withoutEnlargement: false })
+    .ensureAlpha() // a mock photo is opaque: its "silhouette" is the whole rectangle
+    .png()
+    .toBuffer({ resolveWithObject: true });
+
 /**
  * Compositing renderer (mock and local): style background + product, at exact size.
  * `input` is the seller photo (mock) or a transparent product cutout (local).
  * `angle` is the brief's answer: "atas" (flat lay) or "depan" (standing, default).
+ * `variant` "duo" adds a smaller, blurred copy behind and to the right (depth of
+ * field), laid out from `seed`; `reflection` adds a glossy-floor mirror under
+ * standing products.
  * Returns { width, height, bytes, degraded }.
  */
-export const renderOutput = async ({ input, style, width, height, targetPath, angle = 'depan' }) => {
+export const renderOutput = async ({
+  input,
+  style,
+  width,
+  height,
+  targetPath,
+  angle = 'depan',
+  variant = 'single',
+  reflection = false,
+  seed = '',
+}) => {
   const lib = await loadSharp();
   if (!lib) {
     await fs.writeFile(targetPath, input);
@@ -190,26 +268,65 @@ export const renderOutput = async ({ input, style, width, height, targetPath, an
     return { width, height, bytes: stat.size, degraded: true };
   }
 
-  // Product occupies ~74% of the frame: enough margin for marketplace UI chrome.
-  const productBox = Math.round(Math.min(width, height) * 0.74);
-  const product = await lib(input)
-    .rotate() // honour EXIF orientation from phone cameras
-    .resize(productBox, productBox, { fit: 'inside', withoutEnlargement: false })
-    .ensureAlpha() // a mock photo is opaque: its "silhouette" is the whole rectangle
-    .png()
-    .toBuffer({ resolveWithObject: true });
+  const short = Math.min(width, height);
+  const flatlay = angle === 'atas';
+  const shadowFor = (product, place) =>
+    flatlay ? flatlayShadow(lib, product, place) : standingShadow(lib, product, place);
+  const layersFor = async (product, place, mirror = reflection) => [
+    await shadowFor(product, place),
+    ...(mirror && !flatlay ? await reflectionLayer(lib, product, place) : []),
+    { input: product.data, left: place.left, top: place.top },
+  ];
 
-  const place = {
-    width,
-    height,
-    left: Math.round((width - product.info.width) / 2),
-    top: Math.round((height - product.info.height) / 2),
-  };
-  const shadow = angle === 'atas' ? await flatlayShadow(lib, product, place) : await standingShadow(lib, product, place);
+  let layers;
+  let front;
+  if (variant === 'duo') {
+    const layout = duoLayout(seed, flatlay);
+    front = await turn(lib, await fitProduct(lib, input, Math.round(short * DUO_FRONT)), layout.frontAngle);
+    const back = await turn(
+      lib,
+      await fitProduct(lib, input, Math.round(short * DUO_FRONT * layout.backScale)),
+      layout.backAngle,
+    );
+    // Padded first, so the blur fades out instead of being clipped at the cutout's edge.
+    const sigma = Math.max(0.3, DUO_BLUR * short);
+    const pad = Math.ceil(sigma * 3);
+    const blurred = await lib(back.data)
+      .extend({ top: pad, bottom: pad, left: pad, right: pad, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .blur(sigma)
+      .png()
+      .toBuffer({ resolveWithObject: true });
+    const frontBase = Math.round((height + front.info.height) / 2 + layout.lift * height * 0.5);
+    front.place = {
+      width,
+      height,
+      left: clamp(Math.round((0.5 - 0.1 * layout.side) * width - front.info.width / 2), 0, width - front.info.width),
+      top: frontBase - front.info.height,
+    };
+    const backPlace = {
+      width,
+      height,
+      left: clamp(Math.round((0.5 + 0.13 * layout.side) * width - back.info.width / 2), 0, width - back.info.width) - pad,
+      top: Math.max(0, frontBase - Math.round(layout.lift * height) - back.info.height) - pad,
+    };
+    // No reflection on the back copy: the padding would offset it from the base.
+    layers = [...(await layersFor(blurred, backPlace, false)), ...(await layersFor(front, front.place))];
+  } else {
+    // Product occupies ~74% of the frame: enough margin for marketplace UI chrome.
+    front = await fitProduct(lib, input, Math.round(short * 0.74));
+    front.place = {
+      width,
+      height,
+      left: Math.round((width - front.info.width) / 2),
+      top: Math.round((height - front.info.height) / 2),
+    };
+    layers = await layersFor(front, front.place);
+  }
 
-  const floorY = angle === 'atas' ? null : place.top + product.info.height;
-  await lib(Buffer.from(backgroundSvg(style, width, height, floorY, place.top + product.info.height / 2)))
-    .composite([shadow, { input: product.data, left: place.left, top: place.top }])
+  const frontBottom = front.place.top + front.info.height;
+  const floorY = flatlay ? null : frontBottom;
+  await lib(Buffer.from(backgroundSvg(style, width, height, floorY, frontBottom - front.info.height / 2)))
+    .composite(layers)
     .jpeg(JPEG)
     .toFile(targetPath);
 
@@ -318,7 +435,8 @@ export const generateForOrder = async (order, onProgress, deps = {}) => {
   const outDir = path.join(config.paths.results, order.id);
   await fs.mkdir(outDir, { recursive: true });
 
-  const jobs = planJobs(order);
+  // One paid scene per style, rendered in every size: extra photos and duo shots are composite-only.
+  const jobs = planJobs(order).filter((job) => job.photoIndex === 0 && job.variant === 'single');
   const styleIds = [...new Set(jobs.map((job) => job.styleId))];
   // Checked before any call: a run either fits the ceiling or costs nothing.
   if (styleIds.length > settings.maxCallsPerRun) {
@@ -389,7 +507,9 @@ export const generateForOrder = async (order, onProgress, deps = {}) => {
 
 /** The pack's planned outputs, with their catalog entries resolved. */
 const planJobs = (order) =>
-  planOutputs(order).map(({ styleId, marketplaceId, spec }) => ({
+  planOutputs(order).map(({ photoIndex, styleId, variant, marketplaceId, spec }) => ({
+    photoIndex,
+    variant,
     style: getStyle(order.product.categoryId, styleId),
     styleId,
     marketplace: getMarketplace(marketplaceId),
@@ -403,7 +523,8 @@ const resultRecord = (order, job, { filename, meta, source, provider, generation
   url: `${config.publicUrl}/static/results/${order.id}/${filename}`,
   sourcePhotoId: source.id,
   styleId: job.styleId,
-  styleName: job.style?.name || job.styleId,
+  styleName: `${job.style?.name || job.styleId}${job.variant === 'duo' ? ' (Duo)' : ''}`,
+  variant: job.variant,
   marketplaceId: job.marketplaceId,
   marketplaceName: job.marketplace.name,
   label: job.spec.label,
@@ -431,9 +552,7 @@ const generateComposited = async (order, onProgress, settings) => {
   await fs.mkdir(outDir, { recursive: true });
 
   const jobs = planJobs(order);
-
-  // Cycle through the seller's uploads so every source photo gets used.
-  const sources = order.photos;
+  const pack = getPack(order.packId);
   const results = [];
   const failed = [];
 
@@ -453,8 +572,9 @@ const generateComposited = async (order, onProgress, settings) => {
   }
 
   for (const [index, job] of jobs.entries()) {
-    const source = sources[index % sources.length];
-    const filename = `${job.styleId}_${job.marketplaceId}_${job.spec.width}x${job.spec.height}_${nanoid(6)}.jpg`;
+    const source = order.photos[job.photoIndex];
+    const variant = job.variant === 'duo' ? '-duo' : '';
+    const filename = `${job.styleId}${variant}_foto${job.photoIndex + 1}_${job.marketplaceId}_${job.spec.width}x${job.spec.height}_${nanoid(6)}.jpg`;
 
     try {
       const meta = await renderOutput({
@@ -464,6 +584,10 @@ const generateComposited = async (order, onProgress, settings) => {
         height: job.spec.height,
         targetPath: path.join(outDir, filename),
         angle: order.brief?.answers?.angle,
+        variant: job.variant,
+        reflection: Boolean(pack?.reflection),
+        // Same layout for every size of one image; a QA rerun reshuffles it.
+        seed: `${order.id}:${job.photoIndex}:${order.qaRerunCount || 0}`,
       });
       results.push(resultRecord(order, job, { filename, meta, source, provider: settings.provider }));
     } catch (error) {

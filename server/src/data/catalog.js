@@ -290,22 +290,31 @@ export const MARKETPLACES = [
 /**
  * Pricing. Deliberately pay-per-pack (no subscription) and priced inside the
  * Rp15.000-Rp25.000 band an UMKM seller will pay without a second thought.
+ *
+ * Packs differ in how rich the images are, not in sizes: a "foto" is one
+ * distinct image (one seller photo in one style, or one duo shot), and every
+ * marketplace size of it is included free. `photoCount` is the hard cap on
+ * distinct images (maxPhotos x maxStyles, plus one duo shot per photo).
+ * `studioOnly` limits the pack to the category's default (white) style;
+ * `duoShot` adds a second copy of the product behind, blurred (depth of field);
+ * `reflection` adds a glossy-floor reflection to standing shots.
  */
 export const PACKS = [
   {
     id: 'hemat',
     name: 'Paket Hemat',
     priceIdr: 15000,
-    photoCount: 5,
+    photoCount: 1,
+    maxPhotos: 1,
     maxStyles: 1,
-    maxMarketplaces: 1,
+    studioOnly: true,
+    maxMarketplaces: 4,
     turnaroundHours: 6,
     freeRevisions: 0,
     priorityReview: false,
     highlights: [
-      '5 foto siap unggah',
-      '1 gaya latar pilihan',
-      '1 marketplace tujuan',
+      '1 foto produk, latar studio putih',
+      'Ukuran untuk semua marketplace',
       'Dicek reviewer manusia',
     ],
   },
@@ -313,17 +322,18 @@ export const PACKS = [
     id: 'standar',
     name: 'Paket Standar',
     priceIdr: 20000,
-    photoCount: 10,
+    photoCount: 15,
+    maxPhotos: 5,
     maxStyles: 3,
-    maxMarketplaces: 3,
+    maxMarketplaces: 4,
     turnaroundHours: 3,
     freeRevisions: 1,
     priorityReview: false,
     popular: true,
     highlights: [
-      '10 foto siap unggah',
-      '3 gaya latar pilihan',
-      '3 marketplace tujuan',
+      'Sampai 5 foto dari sudut berbeda',
+      '3 gaya latar: putih + 2 studio warna',
+      'Ukuran untuk semua marketplace',
       'Dicek reviewer manusia',
       '1x revisi gratis',
     ],
@@ -332,16 +342,20 @@ export const PACKS = [
     id: 'premium',
     name: 'Paket Premium',
     priceIdr: 25000,
-    photoCount: 15,
+    photoCount: 30,
+    maxPhotos: 5,
     maxStyles: 5,
+    duoShot: true,
+    reflection: true,
     maxMarketplaces: 4,
     turnaroundHours: 1,
     freeRevisions: 2,
     priorityReview: true,
     highlights: [
-      '15 foto siap unggah',
-      '5 gaya latar pilihan',
-      'Semua marketplace + Instagram',
+      'Sampai 5 foto dari sudut berbeda',
+      'Semua gaya latar',
+      'Foto duo dengan latar blur (depth of field)',
+      'Pantulan lantai mengilap',
       'Antrean review prioritas',
       '2x revisi gratis',
     ],

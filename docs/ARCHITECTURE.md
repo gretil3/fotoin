@@ -41,8 +41,9 @@ POST /api/v1/orders/:id/pay   (mock provider only; in production the provider we
         │                     status ──► diproses_ai, dueAt restarts from payment
         │                     pipeline.service.enqueue(orderId)
         │
-   [async] pipeline           order.service.planOutputs decides WHAT to render, capped at
-        │                     the pack's photoCount (primary sizes first)
+   [async] pipeline           order.service.planImages decides WHICH images (photo x style,
+        │                     + duo shots), capped at the pack's photoCount; planOutputs
+        │                     expands each into every marketplace size
         │                     image.service.generateForOrder renders exactly that list:
         │                       background SVG + contact shadow + photo, composited
         │                       written at the exact spec dimensions
@@ -133,8 +134,9 @@ which staff can retry. When the queue moves to BullMQ the durable queue replaces
 
 ### One planner decides what gets generated
 
-`planOutputs()` in `order.service.js` is the only place that decides which images an order
-gets. The generator renders that list and the "N photos planned" figure reads its length, so
+`planImages()` in `order.service.js` is the only place that decides which images an order
+gets, and `planOutputs()` expands them into sizes. The generator renders that list and the "N
+photos planned" figure counts the images, so
 what a seller was promised and what we pay to produce cannot drift apart.
 
 ### The seller brief stands in for a prompt

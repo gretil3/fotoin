@@ -379,21 +379,22 @@ test('validation rejects a brief that exceeds the paid pack', async () => {
   assert.match(body.error.message, /hanya mencakup 1 gaya/);
 });
 
-test('the pack photo count is a hard cap on what gets generated', async () => {
-  // Premium promises 15 photos. 5 styles x 4 marketplaces x 2 sizes would be 40.
+test('the pack photo count caps distinct images; every size of each is rendered', async () => {
+  // Premium, 1 photo x 5 styles + 1 duo = 6 images, each in 2 sizes x 4 marketplaces.
   const { order } = await makeOrder({
     packId: 'premium',
     styleIds: ['studio-putih', 'meja-kayu', 'flatlay-bahan', 'lifestyle-kafe', 'promo-kontras'],
     marketplaceIds: ['shopee', 'tokopedia', 'tiktok-shop', 'instagram'],
   });
-  assert.equal(order.plannedOutputs, 15);
+  assert.equal(order.plannedOutputs, 6);
 
   await json(`/api/v1/orders/${order.id}/pay`, { method: 'POST' });
   const inReview = await waitForStatus(order.id, 'menunggu_review');
-  assert.equal(inReview.results.length, 15);
+  assert.equal(inReview.results.length, 48);
+  assert.equal(inReview.results.filter((result) => result.variant === 'duo').length, 8);
 
   const files = await fs.readdir(path.join(config.paths.results, order.id));
-  assert.equal(files.length, 15, 'no extra files were rendered and left on disk');
+  assert.equal(files.length, 48, 'no extra files were rendered and left on disk');
 });
 
 test('uploads are verified: a non-image with an image Content-Type is refused and not kept', async () => {

@@ -108,6 +108,13 @@ export const createOrder = (input) => {
       code: 'BAD_PHOTO_FILENAME',
     });
   }
+  if (input.photos.length > pack.maxPhotos) {
+    throw new ApiError(
+      422,
+      `${pack.name} hanya mencakup ${pack.maxPhotos} foto. Kurangi foto atau naikkan paket.`,
+      { code: 'TOO_MANY_PHOTOS' },
+    );
+  }
 
   const styleIds = [...new Set(input.styleIds || [])];
   if (styleIds.length === 0) {
@@ -124,6 +131,11 @@ export const createOrder = (input) => {
   if (unknownStyle) {
     throw new ApiError(422, `Gaya "${unknownStyle}" tidak tersedia untuk kategori ${category.name}.`, {
       code: 'UNKNOWN_STYLE',
+    });
+  }
+  if (pack.studioOnly && styleIds.some((id) => !getStyle(category.id, id).default)) {
+    throw new ApiError(422, `${pack.name} hanya untuk latar studio putih. Naikkan paket untuk gaya lain.`, {
+      code: 'STUDIO_ONLY',
     });
   }
 
@@ -230,38 +242,45 @@ export const listOrders = ({ status, whatsapp } = {}) => {
 };
 
 /**
- * The exact list of images the pipeline may render for an order, capped at the
- * pack's photoCount. The generator and the "N photos planned" figure both read
- * this, so what a seller was promised and what we spend money producing cannot
- * drift apart.
+ * The distinct images ("foto") an order gets, capped at the pack's photoCount:
+ * every seller photo in every chosen style, then (duoShot packs) one duo shot
+ * per photo in the first style. Each one is rendered in every marketplace size
+ * by planOutputs, so sizes never eat into what the seller paid for.
  *
- * Ordering matters when the cap bites: every style x marketplace pair gets its
- * primary output first, and secondary sizes (promo cover, thumbnail, story...)
- * only fill whatever budget is left. That way a cut never removes a whole
- * marketplace or style the seller picked.
- *
- * @returns {Array<{styleId: string, marketplaceId: string, spec: object}>}
+ * @returns {Array<{photoIndex: number, styleId: string, variant: 'single'|'duo'}>}
  */
-export const planOutputs = (order) => {
+export const planImages = (order) => {
   const pack = getPack(order.packId);
   if (!pack) return [];
-  const marketplaces = order.marketplaceIds.map((id) => getMarketplace(id)).filter(Boolean);
-  const tiers = Math.max(0, ...marketplaces.map((market) => market.outputs.length));
-
-  const jobs = [];
-  for (let tier = 0; tier < tiers; tier += 1) {
-    for (const styleId of order.styleIds) {
-      for (const marketplace of marketplaces) {
-        const spec = marketplace.outputs[tier];
-        if (spec) jobs.push({ styleId, marketplaceId: marketplace.id, spec });
-      }
-    }
+  const photos = order.photos.map((_, photoIndex) => photoIndex);
+  const images = order.styleIds.flatMap((styleId) =>
+    photos.map((photoIndex) => ({ photoIndex, styleId, variant: 'single' })),
+  );
+  if (pack.duoShot) {
+    images.push(...photos.map((photoIndex) => ({ photoIndex, styleId: order.styleIds[0], variant: 'duo' })));
   }
-  return jobs.slice(0, pack.photoCount);
+  return images.slice(0, pack.photoCount);
 };
 
-/** How many images the pipeline will produce, capped by the pack. */
-export const plannedOutputCount = (order) => planOutputs(order).length;
+/**
+ * The exact list of files the pipeline may render: each planned image in every
+ * size of every chosen marketplace. The generator and the "N photos planned"
+ * figure both derive from planImages, so what a seller was promised and what
+ * we produce cannot drift apart.
+ *
+ * @returns {Array<{photoIndex: number, styleId: string, variant: string, marketplaceId: string, spec: object}>}
+ */
+export const planOutputs = (order) => {
+  const marketplaces = order.marketplaceIds.map((id) => getMarketplace(id)).filter(Boolean);
+  return planImages(order).flatMap((image) =>
+    marketplaces.flatMap((marketplace) =>
+      marketplace.outputs.map((spec) => ({ ...image, marketplaceId: marketplace.id, spec })),
+    ),
+  );
+};
+
+/** How many distinct images ("foto") the seller gets, capped by the pack. */
+export const plannedOutputCount = (order) => planImages(order).length;
 
 export default {
   ORDER_STATUS,
@@ -271,6 +290,7 @@ export default {
   listOrders,
   transition,
   canTransition,
+  planImages,
   planOutputs,
   plannedOutputCount,
   normalizeWhatsapp,

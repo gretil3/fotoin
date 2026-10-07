@@ -141,12 +141,14 @@ export default function CreateOrderPage() {
     }));
   };
 
-  // Lowering the pack trims selections that no longer fit.
+  const defaultStyleId = category?.styles.find((style) => style.default)?.id;
+
+  // Lowering the pack trims selections that no longer fit; a studio-only pack gets the white style.
   const pickPack = (packId) => {
     const next = catalog.packs.find((item) => item.id === packId);
     set({
       packId,
-      styleIds: form.styleIds.slice(0, next.maxStyles),
+      styleIds: next.studioOnly && defaultStyleId ? [defaultStyleId] : form.styleIds.slice(0, next.maxStyles),
       marketplaceIds: form.marketplaceIds.slice(0, next.maxMarketplaces),
     });
   };
@@ -154,7 +156,9 @@ export default function CreateOrderPage() {
   const stepValid = [
     files.length > 0 && form.productName.trim().length >= 2,
     Boolean(form.categoryId) && form.styleIds.length > 0 && form.marketplaceIds.length > 0,
-    form.sellerName.trim().length >= 2 && form.whatsapp.replace(/\D/g, '').length >= 9,
+    form.sellerName.trim().length >= 2 &&
+      form.whatsapp.replace(/\D/g, '').length >= 9 &&
+      files.length <= (pack?.maxPhotos ?? Infinity),
   ][step];
 
   const submit = async () => {
@@ -286,7 +290,10 @@ Cukup 3 langkah. Tinggal foto, pilih, bayar.</p>
                             description={style.description}
                             swatch={swatchStyle(style.background)}
                             selected={selected}
-                            disabled={!selected && form.styleIds.length >= pack.maxStyles}
+                            disabled={
+                              !selected &&
+                              (form.styleIds.length >= pack.maxStyles || (pack.studioOnly && !style.default))
+                            }
                             onClick={() => toggle('styleIds', style.id, pack.maxStyles)}
                           />
                         );
@@ -355,7 +362,9 @@ Cukup 3 langkah. Tinggal foto, pilih, bayar.</p>
                 <OptionTile
                   key={item.id}
                   name={`${item.name}${item.popular ? ' - Terlaris' : ''}`}
-                  description={`${rupiah(item.priceIdr)} - ${item.photoCount} foto, selesai ~${item.turnaroundHours} jam`}
+                  description={`${rupiah(item.priceIdr)} - hingga ${item.photoCount} foto, selesai ~${item.turnaroundHours} jam`}
+                  meta={files.length > item.maxPhotos ? `Maks. ${item.maxPhotos} foto, kamu unggah ${files.length}` : null}
+                  disabled={files.length > item.maxPhotos}
                   selected={form.packId === item.id}
                   onClick={() => pickPack(item.id)}
                 />
