@@ -14,10 +14,10 @@ import {
   swatchStyle,
 } from '../components/ui.jsx';
 
-// Three steps, one decision each. Everything with a sensible default (style,
-// brief, story) is folded away under "Atur sendiri", so a seller who is not
-// comfortable with forms can tap straight through.
-const STEPS = ['Foto', 'Jenis Produk', 'Bayar'];
+// Four steps, one decision each. The style step works like a game's settings
+// menu: "Default" (our picks, scaled to the pack) unless the seller switches to
+// "Custom", so someone not comfortable with forms can tap straight through.
+const STEPS = ['Foto', 'Jenis Produk', 'Gaya', 'Bayar'];
 
 const NOTES_MAX = 500;
 
@@ -30,6 +30,12 @@ const STORY_PHRASES = [
   'Latar jangan terlalu ramai.',
   'Tanpa orang atau tangan di foto.',
 ];
+
+/** Default mode's styles: white studio first, then the category's others, as many as the pack allows. */
+const defaultStyleIds = (category, pack) => {
+  const styles = [...category.styles].sort((a, b) => Number(Boolean(b.default)) - Number(Boolean(a.default)));
+  return styles.slice(0, pack.studioOnly ? 1 : pack.maxStyles).map((style) => style.id);
+};
 
 /** Every brief question at its default, so tapping straight through is valid. */
 const briefDefaults = (questions) =>
@@ -55,6 +61,8 @@ const emptyForm = {
   styleIds: [],
   marketplaceIds: [],
   packId: 'standar',
+  // 'default': our picks are sent; 'custom': the seller's. Custom picks survive switching back and forth.
+  mode: 'default',
   notes: '',
   briefAnswers: {},
   paymentMethodId: 'qris',
@@ -155,7 +163,8 @@ export default function CreateOrderPage() {
 
   const stepValid = [
     files.length > 0 && form.productName.trim().length >= 2,
-    Boolean(form.categoryId) && form.styleIds.length > 0 && form.marketplaceIds.length > 0,
+    Boolean(form.categoryId) && form.marketplaceIds.length > 0,
+    form.mode === 'default' || form.styleIds.length > 0,
     form.sellerName.trim().length >= 2 &&
       form.whatsapp.replace(/\D/g, '').length >= 9 &&
       files.length <= (pack?.maxPhotos ?? Infinity),
@@ -166,8 +175,20 @@ export default function CreateOrderPage() {
     setError(null);
     try {
       const { photos } = await api.uploadPhotos(files);
-      const { briefAnswers, ...fields } = form;
-      const { order } = await api.createOrder({ ...fields, brief: { answers: briefAnswers }, photos });
+      const { briefAnswers, mode, ...fields } = form;
+      const custom = mode === 'custom';
+      const { order } = await api.createOrder({
+        ...fields,
+        styleIds: custom ? fields.styleIds : defaultStyleIds(category, pack),
+        notes: custom ? fields.notes : '',
+        // The angle is asked on the photo step, so it counts in both modes.
+        brief: {
+          answers: custom
+            ? briefAnswers
+            : { ...briefDefaults(catalog.briefQuestions || []), angle: briefAnswers.angle },
+        },
+        photos,
+      });
       try {
         // So "Pesanan Saya" can show this seller's orders without asking again.
         localStorage.setItem('fotoin:whatsapp', form.whatsapp.trim());
@@ -195,8 +216,7 @@ export default function CreateOrderPage() {
   return (
     <div className="container" style={{ maxWidth: 860 }}>
       <h1>Buat Pesanan</h1>
-      <p className="muted">
-Cukup 3 langkah. Tinggal foto, pilih, bayar.</p>
+      <p className="muted">Cukup 4 langkah: foto, pilih, (atur gaya kalau mau), bayar.</p>
 
       <Stepper steps={STEPS} current={step} />
       {error && <Alert tone="error">{error}</Alert>}
@@ -266,97 +286,122 @@ Cukup 3 langkah. Tinggal foto, pilih, bayar.</p>
                     );
                   })}
                 </div>
+              </>
+            )}
+          </>
+        )}
 
-                <div className="faq">
-                  <details>
-                    <summary>Atur sendiri gaya &amp; detail foto (tidak wajib)</summary>
-                    <p className="small muted">
-                      Kalau dilewati, kami pilihkan yang paling cocok untuk produkmu.
-                    </p>
+        {step === 2 && category && (
+          <>
+            <div className="row row-between" style={{ alignItems: 'center', marginBottom: 6 }}>
+              <h3 style={{ margin: 0 }}>3. Gaya &amp; detail foto</h3>
+              <span className="badge badge--brand">TIDAK WAJIB</span>
+            </div>
+            <p className="small muted">
+              Biarkan <strong>Default</strong> dan langsung lanjut: kami pilihkan yang paling cocok
+              untuk produkmu. Pilih <strong>Custom</strong> kalau mau atur sendiri.
+            </p>
+            <div className="grid grid-2" style={{ margin: '16px 0 24px' }}>
+              <OptionTile
+                name="Default (disarankan)"
+                description="Studio putih, ditambah gaya terbaik lainnya sesuai paket. Detail lain kami atur."
+                meta={catalog.packs
+                  .map((item) => `${item.name.replace('Paket ', '')}: ${item.studioOnly ? 'putih saja' : `${item.maxStyles} gaya`}`)
+                  .join(' · ')}
+                selected={form.mode === 'default'}
+                onClick={() => set({ mode: 'default' })}
+              />
+              <OptionTile
+                name="Custom"
+                description="Pilih gaya latar, jawab detail foto, dan tulis pesan untuk kami."
+                selected={form.mode === 'custom'}
+                onClick={() => set({ mode: 'custom' })}
+              />
+            </div>
 
-                    <div className="row row-between" style={{ margin: '16px 0 10px' }}>
-                      <strong>Gaya foto</strong>
-                      <span className="small muted">
-                        {form.styleIds.length}/{pack.maxStyles} dipilih ({pack.name})
+            {form.mode === 'custom' && (
+              <>
+                <div className="row row-between" style={{ margin: '16px 0 10px' }}>
+                  <strong>Gaya foto</strong>
+                  <span className="small muted">
+                    {form.styleIds.length}/{pack.maxStyles} dipilih ({pack.name})
+                  </span>
+                </div>
+                <div className="grid grid-3" style={{ marginBottom: 24 }}>
+                  {category.styles.map((style) => {
+                    const selected = form.styleIds.includes(style.id);
+                    return (
+                      <OptionTile
+                        key={style.id}
+                        name={style.name}
+                        description={style.description}
+                        swatch={swatchStyle(style.background)}
+                        selected={selected}
+                        disabled={
+                          !selected &&
+                          (form.styleIds.length >= pack.maxStyles || (pack.studioOnly && !style.default))
+                        }
+                        onClick={() => toggle('styleIds', style.id, pack.maxStyles)}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* The shooting angle is asked on the upload step, next to its tips. */}
+                {briefQuestions.filter((question) => question.id !== 'angle').map((question) => (
+                  <div className="brief-question" key={question.id}>
+                    <div className="brief-question__label">
+                      <span>{question.label}</span>
+                      <span className="small muted" style={{ fontWeight: 400 }}>
+                        {questionHint(question)}
                       </span>
                     </div>
-                    <div className="grid grid-3" style={{ marginBottom: 24 }}>
-                      {category.styles.map((style) => {
-                        const selected = form.styleIds.includes(style.id);
-                        return (
-                          <OptionTile
-                            key={style.id}
-                            name={style.name}
-                            description={style.description}
-                            swatch={swatchStyle(style.background)}
-                            selected={selected}
-                            disabled={
-                              !selected &&
-                              (form.styleIds.length >= pack.maxStyles || (pack.studioOnly && !style.default))
-                            }
-                            onClick={() => toggle('styleIds', style.id, pack.maxStyles)}
-                          />
-                        );
-                      })}
-                    </div>
+                    <ChoiceChips
+                      label={question.label}
+                      options={question.options || []}
+                      multi={question.type === 'multi'}
+                      max={question.max}
+                      value={form.briefAnswers[question.id]}
+                      onChange={(value) => answer(question.id, value)}
+                    />
+                  </div>
+                ))}
 
-                    {/* The shooting angle is asked on the upload step, next to its tips. */}
-                    {briefQuestions.filter((question) => question.id !== 'angle').map((question) => (
-                      <div className="brief-question" key={question.id}>
-                        <div className="brief-question__label">
-                          <span>{question.label}</span>
-                          <span className="small muted" style={{ fontWeight: 400 }}>
-                            {questionHint(question)}
-                          </span>
-                        </div>
-                        <ChoiceChips
-                          label={question.label}
-                          options={question.options || []}
-                          multi={question.type === 'multi'}
-                          max={question.max}
-                          value={form.briefAnswers[question.id]}
-                          onChange={(value) => answer(question.id, value)}
-                        />
-                      </div>
-                    ))}
-
-                    <div className="field" style={{ marginBottom: 10 }}>
-                      <label htmlFor="notes">Ada pesan untuk kami?</label>
-                      <textarea
-                        id="notes"
-                        className="textarea"
-                        maxLength={NOTES_MAX}
-                        placeholder='Contoh: Warna kemasan merah jangan diubah, tulisan "Halal" harus terbaca.'
-                        value={form.notes}
-                        onChange={(event) => set({ notes: event.target.value })}
-                      />
-                      <div className="char-count">
-                        {form.notes.length}/{NOTES_MAX}
-                      </div>
-                    </div>
-                    <div className="choices" role="group" aria-label="Kalimat cepat untuk pesan">
-                      {STORY_PHRASES.map((phrase) => (
-                        <button
-                          key={phrase}
-                          type="button"
-                          className="choice choice--add"
-                          aria-pressed={form.notes.includes(phrase)}
-                          onClick={() => togglePhrase(phrase)}
-                        >
-                          {form.notes.includes(phrase) ? '✓' : '+'} {phrase}
-                        </button>
-                      ))}
-                    </div>
-                  </details>
+                <div className="field" style={{ marginBottom: 10 }}>
+                  <label htmlFor="notes">Ada pesan untuk kami?</label>
+                  <textarea
+                    id="notes"
+                    className="textarea"
+                    maxLength={NOTES_MAX}
+                    placeholder='Contoh: Warna kemasan merah jangan diubah, tulisan "Halal" harus terbaca.'
+                    value={form.notes}
+                    onChange={(event) => set({ notes: event.target.value })}
+                  />
+                  <div className="char-count">
+                    {form.notes.length}/{NOTES_MAX}
+                  </div>
+                </div>
+                <div className="choices" role="group" aria-label="Kalimat cepat untuk pesan">
+                  {STORY_PHRASES.map((phrase) => (
+                    <button
+                      key={phrase}
+                      type="button"
+                      className="choice choice--add"
+                      aria-pressed={form.notes.includes(phrase)}
+                      onClick={() => togglePhrase(phrase)}
+                    >
+                      {form.notes.includes(phrase) ? '✓' : '+'} {phrase}
+                    </button>
+                  ))}
                 </div>
               </>
             )}
           </>
         )}
 
-        {step === 2 && (
+        {step === 3 && (
           <>
-            <h3>3. Pilih paket</h3>
+            <h3>4. Pilih paket</h3>
             <div className="grid grid-3" style={{ marginBottom: 24 }}>
               {catalog.packs.map((item) => (
                 <OptionTile
