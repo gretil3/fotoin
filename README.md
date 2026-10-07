@@ -108,19 +108,107 @@ thing end to end. The default `mock` image provider composites real output local
 
 ---
 
-## Quick start
+## Setup
+
+Two ways to run it. **Quick** needs only Node and shows the whole flow, but the product is not
+cut out (the photo is pasted as a rectangle). **Real cutouts** adds the Python pipeline in
+`pipeline/`, which removes the background for real. Both are free and need no API key.
+
+### What to download
+
+| You need | For | Get it |
+|---|---|---|
+| Git | both | <https://git-scm.com/downloads> |
+| Node.js **20 or newer** | both | <https://nodejs.org> (LTS) |
+| [uv](https://docs.astral.sh/uv/) | real cutouts | see step 3 below; it also downloads Python 3.12 for you |
+| ~1 GB disk | real cutouts | Python packages + the U2-Net model (~176 MB, fetched once) |
+
+Not needed: no GPU, no Docker, no database, no API key. The Stable Diffusion / PyTorch
+experiment is paused, so do not install torch.
+
+### 1. Get the code and install (once)
 
 ```bash
-# Requires Node.js 20 or newer
-git clone <this-repo> && cd fotoin
+git clone https://github.com/gretil3/fotoin.git
+cd fotoin
 npm install
+```
 
-# Optional: both apps have working defaults, so this is only needed to change them
-cp server/.env.example server/.env
-cp web/.env.example web/.env
+### 2. Quick run (no Python)
 
+```bash
 npm run dev
 ```
+
+Open http://localhost:5173. The startup banner says `AI provider mock`. Good for trying the
+order flow, packs and reviewer console; product photos are not cut out in this mode.
+
+### 3. Real cutouts: set up the pipeline (once)
+
+Install uv:
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Close and reopen the terminal, then from the repo root:
+
+```bash
+# macOS / Linux
+cd pipeline
+uv venv -p 3.12 .venv
+uv pip install --python .venv/bin/python -e .
+.venv/bin/fotoin --download-models
+cd ..
+```
+
+```powershell
+# Windows (PowerShell)
+cd pipeline
+uv venv -p 3.12 .venv
+uv pip install --python .venv\Scripts\python.exe -e .
+.venv\Scripts\fotoin.exe --download-models
+cd ..
+```
+
+Then tell the server to use it. Copy the example config and change one line:
+
+```bash
+cp server/.env.example server/.env      # Windows: copy server\.env.example server\.env
+```
+
+In `server/.env`, set `IMAGE_PROVIDER=local` (it says `mock`). `LOCAL_PIPELINE_URL` already
+points at `http://localhost:8000`.
+
+### 4. Real cutouts: run it (every time)
+
+Two terminals, both from the repo root:
+
+```bash
+# Terminal 1: the cutout service (leave it running)
+cd pipeline && .venv/bin/uvicorn fotoin.api:app --port 8000
+# Windows: cd pipeline; .venv\Scripts\uvicorn.exe fotoin.api:app --port 8000
+
+# Terminal 2: the app
+npm run dev
+```
+
+The startup banner should say `AI provider local (Python pipeline at http://localhost:8000)`.
+
+### If something goes wrong
+
+| You see | Fix |
+|---|---|
+| `Pipeline lokal tidak bisa dihubungi` on a failed order | Terminal 1 is not running; start it, then press retry in `/review` |
+| The pipeline refuses to start: model weights missing | Run the `--download-models` line from step 3 |
+| Banner still says `AI provider mock` | `server/.env` is missing or still has `IMAGE_PROVIDER=mock`; restart `npm run dev` after editing |
+| `EADDRINUSE` / port already in use | Another copy is running; close it (ports 4000, 5173, 8000) |
+| `uv: command not found` | Reopen the terminal after installing uv |
+
+### Where things are
 
 | Service | URL |
 |---|---|
@@ -236,12 +324,7 @@ All variables have working defaults — the app runs with no `.env` at all. Full
 
 ### Real background removal (`IMAGE_PROVIDER=local`)
 
-Runs the Python pipeline in `pipeline/` (setup in `pipeline/README.md`) next to the server:
-
-```bash
-cd pipeline && .venv/bin/uvicorn fotoin.api:app --port 8000   # terminal 1
-IMAGE_PROVIDER=local npm run dev                               # terminal 2
-```
+Set up and run as in [Setup](#setup), steps 3 and 4.
 
 The pipeline cuts the product out and color-corrects it (product pixels are never
 regenerated); the server puts it on each style's backdrop at every marketplace size. Free, no
